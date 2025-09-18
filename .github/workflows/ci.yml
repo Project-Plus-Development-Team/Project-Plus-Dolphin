@@ -3,7 +3,7 @@ name: Project+ Dolphin Builder
 on: [push, pull_request]
 
 jobs: 
-   build_macos:
+  build_macos:
     name: macOS Build x86_64
     runs-on: macos-14
     steps:
@@ -283,7 +283,7 @@ jobs:
       with:
         name: Dolphin-macOS-x86_64
         path: build/OUT/Dolphin-macOS-x86_64.dmg
-          
+        
   build_windows_x86_64:
     name: Windows Build
     runs-on: windows-latest
