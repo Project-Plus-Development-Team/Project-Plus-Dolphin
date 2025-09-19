@@ -177,9 +177,8 @@ jobs:
         vs-version: '16.6.2'
     - name: Get Tags
       run: | 
-        git fetch --tags &&
-        LATEST_TAG="$(git describe --tags --abbrev=0)" &&
-        git checkout $LATEST_TAG
+        TAGLATEST="$(git describe --tags --abbrev=0)"
+        git checkout $TAGLATEST
     - name: Build
       run: msbuild "Source\dolphin-emu.sln" /verbosity:minimal /property:Configuration=Release /property:Platform=x64
     - name: Upload Build Artifact
