@@ -178,7 +178,7 @@ jobs:
     - name: Get Tags
       run: | 
         git fetch --depth=0 --tags
-        $TAGLATEST="$(git describe --tags --abbrev=0)"
+        $TAGLATEST="git describe --tags $(git rev-list --tags --max-count=1)"
         git checkout $TAGLATEST
     - name: Build
       run: msbuild "Source\dolphin-emu.sln" /verbosity:minimal /property:Configuration=Release /property:Platform=x64
