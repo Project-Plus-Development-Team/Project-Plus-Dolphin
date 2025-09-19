@@ -177,7 +177,7 @@ jobs:
         vs-version: '16.6.2'
     - name: Get Tags
       run: | 
-        git fetch origin --tags && \
+        git fetch origin --tags && 
         git checkout tags/a-test-tag
     - name: Build
       run: msbuild "Source\dolphin-emu.sln" /verbosity:minimal /property:Configuration=Release /property:Platform=x64
