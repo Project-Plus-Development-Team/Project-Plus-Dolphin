@@ -177,7 +177,7 @@ jobs:
         vs-version: '16.6.2'
     - name: Get Tags
       run: | 
-        git fetch --depth=0 --tags
+        git fetch --tags
         $TAGLATEST="git describe --tags $(git rev-list --tags --max-count=1)"
         git checkout $TAGLATEST
     - name: Build
