@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           submodules: recursive
 
@@ -171,15 +171,8 @@ jobs:
     - uses: actions/checkout@v2
     - name: Get Tags
       run: | 
-        TAG="$(git tag --points-at HEAD)"
-          if [ ! -z "$TAG" ]; then
-            SUFFIX="$TAG"
-          elif [ "$EVENT_NAME" == "pull_request" ]; then
-            PR_TITLE=$(echo "${PR_TITLE}" | tr -cd '[a-zA-Z0-9[:space:]]_-')
-            SUFFIX="pr[$PR_NUM]-sha[$PR_SHA]-title[$PR_TITLE"
-            SUFFIX=$(printf "%.99s]" "$SUFFIX")
-          else
-            SUFFIX="sha[$(git rev-parse --short HEAD)]"
+        git fetch origin --tags
+        git checkout the-testerrrr
     - name: Setup Submodules
       run: git config --global --add safe.directory . && git submodule update --init --recursive
     - name: Setup MSBuild
@@ -222,7 +215,7 @@ jobs:
       yaqti: 6.7.3
     steps:
     - name: Checkout Upstream Repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v2
       with:
         repository: Project-Plus-Development-Team/Project-Plus-Dolphin
         ref: mac-fixes-again
