@@ -169,15 +169,16 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Get Tags
+      run: | 
+        git fetch --tags
+        git describe --tags $(git rev-list --tags --max-count=1)
     - name: Setup Submodules
       run: git config --global --add safe.directory . && git submodule update --init --recursive
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.0.2
       with:
         vs-version: '16.6.2'
-    - name: Get Tags
-      run: | 
-        git fetch --tags
     - name: Build
       run: msbuild "Source\dolphin-emu.sln" /verbosity:minimal /property:Configuration=Release /property:Platform=x64
     - name: Upload Build Artifact
