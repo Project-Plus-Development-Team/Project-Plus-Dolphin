@@ -7,7 +7,7 @@ if(GIT_FOUND)
       OUTPUT_VARIABLE DOLPHIN_WC_REVISION
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   # defines DOLPHIN_WC_DESCRIBE
-  execute_process(WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} COMMAND ${GIT_EXECUTABLE} describe --tags # --always --long --dirty # removed from here while we're using a patch for SDL; will likely be fixed in the future 
+  execute_process(WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} COMMAND ${GIT_EXECUTABLE} describe --tags --always --long # --dirty # removed from here while we're using a patch for SDL; will likely be fixed in the future 
       OUTPUT_VARIABLE DOLPHIN_WC_DESCRIBE
       OUTPUT_STRIP_TRAILING_WHITESPACE)
 
