@@ -172,7 +172,6 @@ jobs:
     - name: Get Tags
       run: | 
         git fetch origin --tags
-        git checkout the-testerrrr
     - name: Setup Submodules
       run: git config --global --add safe.directory . && git submodule update --init --recursive
     - name: Setup MSBuild
@@ -219,7 +218,7 @@ jobs:
       with:
         repository: Project-Plus-Development-Team/Project-Plus-Dolphin
         ref: mac-fixes-again
-        depth: false
+        fetch-depth: 0
 
     - name: Checkout Submodules
       if: steps.cache-submodules.outputs.cache-hit != 'true'
