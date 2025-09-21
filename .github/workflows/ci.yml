@@ -219,6 +219,7 @@ jobs:
       with:
         repository: Project-Plus-Development-Team/Project-Plus-Dolphin
         ref: mac-fixes-again
+        depth: false
 
     - name: Checkout Submodules
       if: steps.cache-submodules.outputs.cache-hit != 'true'
@@ -227,7 +228,6 @@ jobs:
     - name: Checkout AppImage Repo
       uses: actions/checkout@v4
       with:
-          depth: false
           clean: false
           path: ci
 
