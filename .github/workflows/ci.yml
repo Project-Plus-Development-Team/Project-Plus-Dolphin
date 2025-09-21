@@ -227,6 +227,7 @@ jobs:
     - name: Checkout AppImage Repo
       uses: actions/checkout@v4
       with:
+          depth: false
           clean: false
           path: ci
 
