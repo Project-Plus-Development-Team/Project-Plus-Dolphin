@@ -7,9 +7,10 @@ if(GIT_FOUND)
       OUTPUT_VARIABLE DOLPHIN_WC_REVISION
       OUTPUT_STRIP_TRAILING_WHITESPACE)
   # defines DOLPHIN_WC_DESCRIBE
-  execute_process(WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} COMMAND ${GIT_EXECUTABLE} describe --always --long # --dirty # removed from here while we're using a patch for SDL; will likely be fixed in the future 
-      OUTPUT_VARIABLE DOLPHIN_WC_DESCRIBE
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
+  #execute_process(WORKING_DIRECTORY ${PROJECT_SOURCE_DIR} COMMAND ${GIT_EXECUTABLE} describe --always --long # --dirty # removed from here while we're using a patch for SDL; will likely be fixed in the future 
+  #    OUTPUT_VARIABLE DOLPHIN_WC_DESCRIBE
+  #    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  			set(DOLPHIN_WC_DESCRIBE "v3.1.2-mainline-beta.5")
 
   # remove hash (and trailing "-0" if needed) from description
   string(REGEX REPLACE "(-0)?-[^-]+((-dirty)?)$" "\\2" DOLPHIN_WC_DESCRIBE "${DOLPHIN_WC_DESCRIBE}")
@@ -34,8 +35,8 @@ string(TIMESTAMP DOLPHIN_WC_BUILD_DATE "%Y-%m-%d" UTC)
 
 # version number
 set(DOLPHIN_VERSION_MAJOR "v3.1.2")
-set(DOLPHIN_VERSION_MINOR "mainline-beta.5")
-# set(DOLPHIN_VERSION_PATCH ${DOLPHIN_WC_REVISION})
+set(DOLPHIN_VERSION_MINOR "0")
+set(DOLPHIN_VERSION_PATCH ${DOLPHIN_WC_REVISION})
 
 # If Dolphin is not built from a Git repository, default the version info to
 # reasonable values.
