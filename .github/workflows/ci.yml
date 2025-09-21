@@ -170,9 +170,9 @@ jobs:
     runs-on: windows-latest
     steps:
     - name: Checkout Repository
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
     - name: Setup Submodules
       run: git config --global --add safe.directory . && git submodule update --init --recursive
     - name: Setup MSBuild
