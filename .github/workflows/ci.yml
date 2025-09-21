@@ -18,6 +18,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Install Packages
         env:
@@ -169,9 +170,8 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Get Tags
-      run: | 
-        git fetch origin --tags
+    		with:
+    			fetch-depth: 0
     - name: Setup Submodules
       run: git config --global --add safe.directory . && git submodule update --init --recursive
     - name: Setup MSBuild
