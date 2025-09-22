@@ -108,8 +108,8 @@ modules:
     cleanup:
       - /share/man
     sources:
-      - type: git
-        url: https://github.com/Project-Plus-Development-Team/Project-Plus-Dolphin.git#dolphin-emu-release-prep-2509
+      - repository: Project-Plus-Development-Team/Project-Plus-Dolphin
+        ref: dolphin-emu-release-prep-2509
 
       # TODO: Add x-checker-data
       # Project Plus SD card
