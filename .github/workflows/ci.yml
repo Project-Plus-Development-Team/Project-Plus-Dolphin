@@ -3,6 +3,30 @@ name: Project+ Dolphin Builder
 on: [push, pull_request]
 
 jobs: 
+  build_windows_x86_64:
+    name: Windows Build
+    runs-on: windows-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        repository: Project-Plus-Development-Team/Project-Plus-Dolphin
+        ref: dolphin-emu-release-prep-2509
+        fetch-depth: 0
+    - name: Setup Submodules
+      run: git config --global --add safe.directory . && git submodule update --init --recursive
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.0.2
+      with:
+        vs-version: '16.6.2'
+    - name: Build
+      run: msbuild "Source\dolphin-emu.sln" /verbosity:minimal /property:Configuration=Release /property:Platform=x64
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Project-Plus-Dolphin-windows-x86_64
+        path: Binary/x64/
+        
   build_macos:
     name: macOS Build
     runs-on: macos-14
@@ -15,8 +39,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
+          repository: Project-Plus-Development-Team/Project-Plus-Dolphin
+          ref: dolphin-emu-release-prep-2509
           submodules: recursive
           fetch-depth: 0
 
@@ -165,28 +191,6 @@ jobs:
           name: ${{ steps.create-artifact.outputs.name }}
           path: "*.tar.xz"
           
-  build_windows_x86_64:
-    name: Windows Build
-    runs-on: windows-latest
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-    - name: Setup Submodules
-      run: git config --global --add safe.directory . && git submodule update --init --recursive
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1.0.2
-      with:
-        vs-version: '16.6.2'
-    - name: Build
-      run: msbuild "Source\dolphin-emu.sln" /verbosity:minimal /property:Configuration=Release /property:Platform=x64
-    - name: Upload Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Project-Plus-Dolphin-windows-x86_64
-        path: Binary/x64/
-        
   build_flatpak:
     name: Flatpak Build
     runs-on: ubuntu-latest
@@ -215,10 +219,10 @@ jobs:
       yaqti: 6.7.3
     steps:
     - name: Checkout Upstream Repo
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       with:
         repository: Project-Plus-Development-Team/Project-Plus-Dolphin
-        ref: mac-fixes-again
+        ref: dolphin-emu-release-prep-2509
         fetch-depth: 0
 
     - name: Checkout Submodules
