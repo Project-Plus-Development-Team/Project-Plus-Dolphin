@@ -24,7 +24,7 @@ jobs:
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Project-Plus-Dolphin-windows-x86_64
+        name: Project-Plus-Dolphin-Windows-${{ env.DOLPHINVER }}
         path: Binary/x64/
         
   build_macos:
@@ -339,7 +339,7 @@ jobs:
     - name: Upload Static Build
       uses: actions/upload-artifact@v4
       with:
-        name: Project-Plus-Dolphin_${{ env.DOLPHINVER }}
+        name: Project-Plus-Dolphin-AppImage_${{ env.DOLPHINVER }}
         path: uploads/
       env:
         DEFAULT_BRANCH: git-actions
