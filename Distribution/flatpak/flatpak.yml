@@ -108,6 +108,8 @@ modules:
     cleanup:
       - /share/man
     sources:
+      - type: git
+        url: https://github.com/Project-Plus-Development-Team/Project-Plus-Dolphin.git#dolphin-emu-release-prep-2509
 
       # TODO: Add x-checker-data
       # Project Plus SD card
@@ -124,10 +126,10 @@ modules:
 
       # TODO: Add x-checker-data
       # Project Plus ModPack that contains HD textures
-      - type: archive
-        url: https://github.com/jlambert360/PPlusReleases/releases/download/v3.1.2/Project+.v3.1.2.Modders.Pack.zip
-        sha256: 291549549a88617f8f72cf549023da9af154493b75da7a8192245ed98c101ba3                                    # This is the hash of the zip file not the uncompressed
-        dest: ModPack
+      #- type: archive
+      # url: https://github.com/jlambert360/PPlusReleases/releases/download/v3.1.2/Project+.v3.1.2.Modders.Pack.zip
+      #  sha256: 291549549a88617f8f72cf549023da9af154493b75da7a8192245ed98c101ba3                                    # This is the hash of the zip file not the uncompressed
+      #  dest: ModPack
 
       # Script that is ran everytime the final Flatpak starts
       - type: file
@@ -162,6 +164,6 @@ modules:
       - mv Data/Sys ${FLATPAK_DEST}/share/project-plus-dolphin/sys/                                                                                # Move Sys directory to correct location (only use without the -DLINUX_LOCAL_DEV=true flag set
       #- tar --transform="s|sd.raw|WiiSD.raw|" -xf sd.tar.gz -C ${FLATPAK_DEST}/share/project-plus-dolphin/sys/Load/                               # Extract, rename and move SD card to correct location
       - mv Launcher ${FLATPAK_DEST}/share/project-plus-dolphin/sys/Wii/                                                                            # Move Launcher directory to correct location
-      - mkdir -p ${FLATPAK_DEST}/share/project-plus-dolphin/sys/Load/Textures                                                                      # Make directory for HD textures
-      - mv "ModPack/Full Quality HD Textures" ${FLATPAK_DEST}/share/project-plus-dolphin/sys/Load/Textures/RSBE01/                              	  # Move HD Textures from ModPack to correct location
+      #- mkdir -p ${FLATPAK_DEST}/share/project-plus-dolphin/sys/Load/Textures                                                                      # Make directory for HD textures
+      #- mv "ModPack/Full Quality HD Textures" ${FLATPAK_DEST}/share/project-plus-dolphin/sys/Load/Textures/RSBE01/                              	  # Move HD Textures from ModPack to correct location
       - install -Dm644 org.projectplusgame.project-plus-dolphin.metainfo.xml -t ${FLATPAK_DEST}/share/metainfo/                                    # Install metainfo file
