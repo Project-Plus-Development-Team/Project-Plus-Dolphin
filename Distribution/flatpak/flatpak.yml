@@ -114,7 +114,7 @@ modules:
         commit: 94774054cb930b6cb2b39556c24fd462ec998553
         
       # TODO: Add x-checker-data
-       Project Plus SD card
+      # Project Plus SD card
       - type: file
         url: https://github.com/jlambert360/FPM-AppImage/releases/download/v3.1.2/sd.tar.gz
         sha256: 389e4025ed3e0a79a1d0646dcc97bbd204fdfad371be72f913f59aa172f531fd            # This is the hash of the tar.gz file not the uncompressed
