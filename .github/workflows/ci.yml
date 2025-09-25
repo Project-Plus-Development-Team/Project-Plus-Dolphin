@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: Project-Plus-Development-Team/Project-Plus-Dolphin
-          ref: dolphin-emu-release-prep-2509
+          ref: mac-fixes-again
           submodules: recursive
           fetch-depth: 0
 

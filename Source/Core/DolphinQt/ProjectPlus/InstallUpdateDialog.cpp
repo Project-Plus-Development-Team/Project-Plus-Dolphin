@@ -133,7 +133,7 @@ void InstallUpdateDialog::install()
   QString fullFilePath = this->temporaryDirectory + QDir::separator() + this->filename;
   
   #ifdef __APPLE__
-  QString appPath = QCoreApplication::applicationDirPath() + QStringLiteral("/../../../"); // Set the installation directory
+  QString appPath = QCoreApplication::applicationDirPath(); // Set the installation directory + QStringLiteral("/../../../")
   #else
   QString appPath = QCoreApplication::applicationDirPath();
   #endif
