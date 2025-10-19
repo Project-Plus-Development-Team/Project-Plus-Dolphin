@@ -839,40 +839,87 @@ void InstallUpdateDialog::startHttpFallback(const QString& sdUrl,
                 QStringLiteral("-Command"), script });
 #else
     // macOS/Linux fallback (curl)
-    QProcess* curl = new QProcess(this);
-    curl->setProcessChannelMode(QProcess::MergedChannels);
+   // 🐧 macOS/Linux fallback (curl avec vitesse + progression fluide)
+QProcess* curl = new QProcess(this);
+curl->setProcessChannelMode(QProcess::MergedChannels);
 
-    connect(curl, &QProcess::readyReadStandardOutput, this, [this, curl, uiProgress]() {
-        const QString out = QString::fromUtf8(curl->readAllStandardOutput());
-        QRegularExpression re(QStringLiteral(R"((\d{1,3})%)"));
-        auto m = re.match(out);
-        if (m.hasMatch()) {
-            int p = m.captured(1).toInt();
-            uiProgress(p, QStringLiteral("curl: %1%").arg(p));
-        }
+// 🧠 Variables pour lissage et progression stable
+static double curlDisplayed = 0.0;
+static double curlTarget    = 0.0;
+static int lastPercent = 0;
+static QTimer* curlTimer = nullptr;
+
+// ⚙️ Animation fluide (mise à jour toutes les 30 ms)
+if (!curlTimer)
+{
+    curlTimer = new QTimer(this);
+    curlTimer->setInterval(30);
+    connect(curlTimer, &QTimer::timeout, this, [this]() {
+        curlDisplayed += (curlTarget - curlDisplayed) * 0.15;  // interpolation douce
+        progressBar->setValue(static_cast<int>(curlDisplayed));
     });
+    curlTimer->start();
+}
 
-    connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
-            this, [=](int e, QProcess::ExitStatus) {
-        QFileInfo fi(sdPath);
-        const bool ok = (e == 0 && fi.exists() && fi.size() > (10 * 1024 * 1024));
-        *sdFinished = true;
-        *sdSuccess = ok;
-        uiDone(ok, ok ? QStringLiteral("✅ SD download complete (curl)!")
-                      : QStringLiteral("❌ SD download failed (curl)"));
-        if (!ok) {
-            QMessageBox::critical(nullptr, QStringLiteral("Download failed"),
-                                  QStringLiteral("Download via curl also failed."));
-        }
-        QMetaObject::invokeMethod(this, [=]() {
-            this->checkIfAllDownloadsFinished(*sdFinished, *sdSuccess);
-        }, Qt::QueuedConnection);
-        curl->deleteLater();
-    });
+connect(curl, &QProcess::readyReadStandardOutput, this, [this, curl, uiProgress]() {
+    const QString out = QString::fromUtf8(curl->readAllStandardOutput());
 
-    curl->start(QStringLiteral("curl"),
-                { QStringLiteral("-L"), QStringLiteral("--progress-bar"),
-                  QStringLiteral("-o"), sdPath, sdUrl });
+    // Exemple : " 25  100M   25 25.2M    0     0  10.2M      0  0:00:09  0:00:09  0:00:09 10.2M/s"
+    QRegularExpression re(QStringLiteral(
+        R"(\s*(\d{1,3})\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([\d\.]+[KMG]?B\/s))"));
+    auto matches = re.globalMatch(out);
+
+    while (matches.hasNext()) {
+        auto m = matches.next();
+        int percent = m.captured(1).toInt();
+        QString speed = m.captured(2).trimmed();
+
+        // 🚫 Ignore les resets (par exemple 10% → 0%)
+        if (percent < lastPercent && lastPercent - percent < 90)
+            continue;
+
+        lastPercent = percent;
+        curlTarget = static_cast<double>(percent);
+        uiProgress(percent, QStringLiteral("curl: %1% (%2)").arg(percent).arg(speed));
+    }
+});
+
+connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+        this, [=](int e, QProcess::ExitStatus) {
+    QFileInfo fi(sdPath);
+    const bool ok = (e == 0 && fi.exists() && fi.size() > (10 * 1024 * 1024));
+    *sdFinished = true;
+    *sdSuccess = ok;
+    uiDone(ok, ok ? QStringLiteral("✅ SD download complete (curl)!")
+                  : QStringLiteral("❌ SD download failed (curl)"));
+
+    if (curlTimer) {
+        curlTimer->stop();
+        curlTimer->deleteLater();
+        curlTimer = nullptr;
+    }
+
+    if (!ok) {
+        QMessageBox::critical(nullptr, QStringLiteral("Download failed"),
+                              QStringLiteral("Download via curl also failed."));
+    }
+
+    QMetaObject::invokeMethod(this, [=]() {
+        this->checkIfAllDownloadsFinished(*sdFinished, *sdSuccess);
+    }, Qt::QueuedConnection);
+    curl->deleteLater();
+});
+
+// 🚀 Lancement du téléchargement
+qDebug().noquote() << "🌐 Launching curl:" << sdUrl << "→" << sdPath;
+curl->start(QStringLiteral("curl"),
+            { QStringLiteral("-L"),
+              QStringLiteral("--progress-bar"),
+              QStringLiteral("--speed-time"), QStringLiteral("5"),
+              QStringLiteral("--speed-limit"), QStringLiteral("1"),
+              QStringLiteral("-o"), sdPath,
+              sdUrl });
+
 #endif
 }
 
@@ -892,8 +939,22 @@ void InstallUpdateDialog::install()
 {
     qDebug().noquote() << QStringLiteral("🧩 Starting installation...");
 
-    // ✅ Extraction dans un dossier temporaire local (dans le dossier Dolphin)
-    const QString tmpDir = installationDirectory + QDir::separator() + QStringLiteral("update_tmp");
+    // ✅ Corrige le dossier temporaire pour macOS portable
+QString tmpDir;
+
+#ifdef __APPLE__
+// On veut créer update_tmp à côté du .app, pas dedans
+QDir baseDir = QFileInfo(installationDirectory).absoluteDir();
+while (!baseDir.isRoot() && !baseDir.path().endsWith(".app"))
+    baseDir.cdUp(); // remonte jusqu’à ProjectPlusFR.app
+
+// Puis on remonte encore un cran pour arriver au dossier "P-FR"
+baseDir.cdUp();
+tmpDir = baseDir.filePath("update_tmp");
+#else
+tmpDir = installationDirectory + QDir::separator() + QStringLiteral("update_tmp");
+#endif
+ 
     const QString zipFile = temporaryDirectory + QDir::separator() + filename;
 
     if (!QFile::exists(zipFile))
@@ -999,43 +1060,37 @@ QProcess::startDetached(
         << QStringLiteral("-Command") << psScript
 );
 #else
-// 🧠 macOS/Linux portable updater (ProjectPlusFR)
-// Remplace entièrement le .app par le nouveau et relance automatiquement
-
+// 🧠 macOS/Linux : remplacement fiable + relance automatique
 QString appBundleName = "ProjectPlusFR.app";
 QString newAppPath = QString("%1/%2").arg(tmpDir, appBundleName);
 QString destAppPath = QString("%1/%2").arg(installationDirectory, appBundleName);
 
-// 🧹 Supprime l’ancien .app s’il existe
-if (QFile::exists(destAppPath)) {
-    qDebug().noquote() << "🧹 Removing old app bundle:" << destAppPath;
-    QProcess::execute("/bin/bash", {"-c", QString("rm -rf '%1'").arg(destAppPath)});
-}
+// 🔧 Script bash externe : attend la fermeture, déplace, relance
+QString script = QStringLiteral(R"(
+sleep 1
+APP_PATH="%1"
+TMP_PATH="%2"
 
-// 💾 Déplace la nouvelle version (copie complète)
-QString moveCmd = QString("mv -f '%1' '%2'").arg(newAppPath, installationDirectory);
-qDebug().noquote() << "🚚 Moving updated app bundle:" << moveCmd;
-int moveResult = QProcess::execute("/bin/bash", {"-c", moveCmd});
+echo "🔪 Closing old app..."
+osascript -e 'tell application "ProjectPlusFR" to quit'
+sleep 2
 
-if (moveResult != 0)
-{
-    qWarning().noquote() << "❌ Failed to move updated .app. Move result =" << moveResult;
-    QMessageBox::warning(nullptr, QStringLiteral("Update"),
-                         QStringLiteral("Update extracted, but failed to replace the app bundle.\n"
-                                        "Please close ProjectPlusFR and move it manually from 'update_tmp'."));
-}
-else
-{
-    // 🧹 Nettoie le dossier temporaire
-    QProcess::execute("/bin/bash", {"-c", QString("rm -rf '%1'").arg(tmpDir)});
-    
-    // 🚀 Relance la nouvelle app via 'open'
-    QString relaunchCmd = QString("open '%1'").arg(destAppPath);
-    qDebug().noquote() << "🔁 Relaunching app:" << relaunchCmd;
-    QProcess::startDetached("/bin/bash", {"-c", relaunchCmd});
-}
+echo "🚚 Moving updated app..."
+rm -rf "$APP_PATH"
+mv -f "$TMP_PATH/%3" "$(dirname "$APP_PATH")"
 
-// ✅ Quitte Dolphin immédiatement pour permettre la copie
+echo "🧹 Cleaning up..."
+rm -rf "$TMP_PATH"
+
+echo "🔁 Relaunching new version..."
+open "$APP_PATH"
+)").arg(destAppPath, tmpDir, appBundleName);
+
+// 🔁 Lance le script dans un shell séparé
+qDebug().noquote() << "🚀 Running macOS update script after quit";
+QProcess::startDetached("/bin/bash", {"-c", script});
+
+// ✅ Quitte Dolphin pour permettre le remplacement
 QCoreApplication::quit();
 
 #endif
