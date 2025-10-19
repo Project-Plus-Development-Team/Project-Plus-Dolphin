@@ -327,8 +327,21 @@ if (!hasEnoughFreeSpace(installationDirectory, minRequiredBytes))
     stepProgressBar->setValue(0);
     stepLabel->setText(QStringLiteral("Checking local SD hash..."));
 
-    const QString sdPath = QDir::toNativeSeparators(
-        QCoreApplication::applicationDirPath() + QStringLiteral("/User/Wii/sd.raw"));
+    // 🧩 Détection du dossier "portable.txt" pour macOS/Linux, safe pour Windows
+QString baseDir = QCoreApplication::applicationDirPath();
+QDir dir(baseDir);
+
+// Remonte jusqu’à trouver portable.txt (ou la racine)
+while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt")))) {
+    dir.cdUp();
+}
+
+// Si on a trouvé portable.txt → on redéfinit la base
+if (QFile::exists(dir.filePath(QStringLiteral("portable.txt")))) {
+    baseDir = dir.absolutePath();
+}
+
+const QString sdPath = QDir::toNativeSeparators(baseDir + QStringLiteral("/User/Wii/sd.raw"));
 
     // ✅ Si la SD existe localement → calcul hash dans un thread
     if (QFile::exists(sdPath))
@@ -484,8 +497,21 @@ void InstallUpdateDialog::startSDDownload()
             return;
         }
 
-        const QString sdPath = QDir::toNativeSeparators(
-            QCoreApplication::applicationDirPath() + QStringLiteral("/User/Wii/sd.raw"));
+        // 🧩 Détection du dossier "portable.txt" pour macOS/Linux, safe pour Windows
+QString baseDir = QCoreApplication::applicationDirPath();
+QDir dir(baseDir);
+
+// Remonte jusqu’à trouver portable.txt (ou la racine)
+while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt")))) {
+    dir.cdUp();
+}
+
+// Si on a trouvé portable.txt → on redéfinit la base
+if (QFile::exists(dir.filePath(QStringLiteral("portable.txt")))) {
+    baseDir = dir.absolutePath();
+}
+
+const QString sdPath = QDir::toNativeSeparators(baseDir + QStringLiteral("/User/Wii/sd.raw"));
 
         QFileInfo fi(sdPath);
         QDir().mkpath(fi.path());
