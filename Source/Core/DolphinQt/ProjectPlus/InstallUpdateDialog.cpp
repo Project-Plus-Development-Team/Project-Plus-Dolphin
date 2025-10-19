@@ -999,13 +999,45 @@ QProcess::startDetached(
         << QStringLiteral("-Command") << psScript
 );
 #else
-// 🐧 Linux/macOS : même principe
-QProcess::startDetached(
-    QStringLiteral("/bin/bash"),
-    {QStringLiteral("-c"),
-     QStringLiteral("sleep 1 && mv -f '%1'/* '%2'/ && rm -rf '%1' && '%2'/Dolphin &")
-         .arg(temporaryDirectory)
-         .arg(installationDirectory)});
+// 🧠 macOS/Linux portable updater (ProjectPlusFR)
+// Remplace entièrement le .app par le nouveau et relance automatiquement
+
+QString appBundleName = "ProjectPlusFR.app";
+QString newAppPath = QString("%1/%2").arg(tmpDir, appBundleName);
+QString destAppPath = QString("%1/%2").arg(installationDirectory, appBundleName);
+
+// 🧹 Supprime l’ancien .app s’il existe
+if (QFile::exists(destAppPath)) {
+    qDebug().noquote() << "🧹 Removing old app bundle:" << destAppPath;
+    QProcess::execute("/bin/bash", {"-c", QString("rm -rf '%1'").arg(destAppPath)});
+}
+
+// 💾 Déplace la nouvelle version (copie complète)
+QString moveCmd = QString("mv -f '%1' '%2'").arg(newAppPath, installationDirectory);
+qDebug().noquote() << "🚚 Moving updated app bundle:" << moveCmd;
+int moveResult = QProcess::execute("/bin/bash", {"-c", moveCmd});
+
+if (moveResult != 0)
+{
+    qWarning().noquote() << "❌ Failed to move updated .app. Move result =" << moveResult;
+    QMessageBox::warning(nullptr, QStringLiteral("Update"),
+                         QStringLiteral("Update extracted, but failed to replace the app bundle.\n"
+                                        "Please close ProjectPlusFR and move it manually from 'update_tmp'."));
+}
+else
+{
+    // 🧹 Nettoie le dossier temporaire
+    QProcess::execute("/bin/bash", {"-c", QString("rm -rf '%1'").arg(tmpDir)});
+    
+    // 🚀 Relance la nouvelle app via 'open'
+    QString relaunchCmd = QString("open '%1'").arg(destAppPath);
+    qDebug().noquote() << "🔁 Relaunching app:" << relaunchCmd;
+    QProcess::startDetached("/bin/bash", {"-c", relaunchCmd});
+}
+
+// ✅ Quitte Dolphin immédiatement pour permettre la copie
+QCoreApplication::quit();
+
 #endif
 
 // ✅ Quitte Dolphin immédiatement pour permettre la copie
