@@ -845,7 +845,8 @@ void InstallUpdateDialog::startHttpFallback(const QString& sdUrl,
     // macOS/Linux fallback (curl)
    // 🐧 macOS/Linux fallback (curl avec vitesse + progression fluide)
 QProcess* curl = new QProcess(this);
-curl->setProcessChannelMode(QProcess::SeparateChannels); 
+curl->setProcessChannelMode(QProcess::MergedChannels);
+curl->setReadChannel(QProcess::StandardError);
 
 
 // 🧠 Variables pour lissage et progression stable
@@ -871,30 +872,28 @@ if (!curlTimer)
 // ⚠️ curl imprime la barre sur STDERR, pas STDOUT.
 // Progression curl: lire STDERR
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
-    const QString chunk = QString::fromUtf8(curl->readAllStandardError());
+    QString output = QString::fromUtf8(curl->readAllStandardError());
 
-    // On prend le DERNIER pourcentage du chunk, au format 10% ou 10.0%
-    static int lastPercent = 0;
-    int foundPercent = -1;
+    // Exemple de ligne : " 34.7%  12.3M  3.21MB/s  eta 00:01:12"
+    static QRegularExpression progressRegex(R"((\d{1,3}(?:\.\d+)?)%\s+[\d\.]+\w?\s+([\d\.]+)([kM]?)/s\s+eta\s+([\d:]+))");
 
-    // Matche 7%, 42%, 99.9%, 100%
-    QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%)"));
-    auto it = re.globalMatch(chunk);
-    while (it.hasNext()) {
-        auto m = it.next();
-        foundPercent = qBound(0, static_cast<int>(m.captured(1).toDouble()), 100);
+    QRegularExpressionMatch match = progressRegex.match(output);
+    if (match.hasMatch())
+    {
+        int percent = static_cast<int>(match.captured(1).toDouble());
+        double speed = match.captured(2).toDouble();
+        QString unit = match.captured(3);
+        QString eta = match.captured(4);
+
+        if (unit == "k") speed /= 1024.0;
+
+        stepProgressBar->setValue(percent);
+        progressBar->setValue(percent / 1.0);
+        stepLabel->setText(QStringLiteral("Downloading... %1% (%2 MB/s, ETA %3)")
+                           .arg(percent)
+                           .arg(speed, 0, 'f', 2)
+                           .arg(eta));
     }
-
-    if (foundPercent >= 0) {
-        // Évite les faux “reset” quand la barre se réécrit (ex: 12% → 0%)
-        if (!(foundPercent < lastPercent && (lastPercent - foundPercent) < 90)) {
-            lastPercent = foundPercent;
-            uiProgress(lastPercent, QStringLiteral("curl: %1%").arg(lastPercent));
-        }
-    }
-
-    // (facultatif) log brut pour debug
-    // if (!chunk.trimmed().isEmpty()) qDebug().noquote() << "[curl]" << chunk.trimmed();
 });
 
 
@@ -981,33 +980,79 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
 
 
 #ifdef __APPLE__
-    // 📦 Corrige le dossier temporaire pour extraire à côté du .app
-    QString appDir = QCoreApplication::applicationDirPath();     // .../Contents/MacOS
-    QString contentsDir = QFileInfo(appDir).path();              // .../Contents
-    QString appBundleDir = QFileInfo(contentsDir).path();        // .../ProjectPlusFR.app (bundle racine)
-    QString parentDir = QFileInfo(appBundleDir).path();          // dossier parent du .app
-    tmpDir = QDir(parentDir).filePath(QStringLiteral("update_tmp"));
+        // --------------------------------------------------------------
+        // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
+        // --------------------------------------------------------------
+        QMetaObject::invokeMethod(QApplication::instance(), [=]() {
+            // Étape 1 : Trouver le .tar extrait
+            QDir tmp(tmpDir);
+            QStringList tars = tmp.entryList(QStringList() << "*.tar", QDir::Files);
+            if (tars.isEmpty())
+            {
+                qWarning().noquote() << "⚠️ Aucun fichier .tar trouvé après extraction ZIP";
+            }
+            else
+            {
+                QString tarPath = tmp.filePath(tars.first());
+                qDebug().noquote() << "📦 Found TAR:" << tarPath;
 
-    QDir().mkpath(tmpDir);
-    qDebug().noquote() << "📦 macOS fixed update_tmp:" << tmpDir;
+                // Étape 2 : Extraire le .tar → dans update_tmp
+                QProcess tarProc;
+                tarProc.setWorkingDirectory(tmpDir);
+                tarProc.start(QStringLiteral("/usr/bin/tar"), {QStringLiteral("-xf"), tarPath});
+                if (!tarProc.waitForFinished(60000))
+                {
+                    qWarning().noquote() << "❌ TAR extraction timeout!";
+                }
+                else
+                {
+                    qDebug().noquote() << "✅ TAR extracted successfully.";
+                }
 
-    // Cherche le .app extrait dans update_tmp
-    QDir d(tmpDir);
-    QStringList apps = d.entryList(QStringList() << QStringLiteral("*.app"), QDir::Dirs | QDir::NoDotAndDotDot);
-    if (apps.isEmpty())
-    {
-        qWarning().noquote() << "❌ Aucun .app trouvé dans update_tmp";
-        return;
-    }
+                // Étape 3 : Supprimer le .tar
+                QFile::remove(tarPath);
+                qDebug().noquote() << "🧹 Removed TAR:" << tarPath;
+            }
 
-    QString newAppPath = d.filePath(apps.first());
-    qDebug().noquote() << "📦 Found new app:" << newAppPath;
+            // Étape 4 : Chercher le nouveau .app dans update_tmp (même dans sous-dossiers)
+            QString newAppPath;
+            QStringList apps;
+            QDirIterator it(tmpDir, QStringList() << "*.app", QDir::Dirs, QDirIterator::Subdirectories);
+            while (it.hasNext())
+                apps << it.next();
 
-    // Chemin complet de l’ancienne app à remplacer
-    QString destAppPath = appBundleDir;
+            if (apps.isEmpty())
+            {
+                qWarning().noquote() << "❌ Aucun .app trouvé après extraction TAR";
+                return;
+            }
 
-    // Script bash de remplacement + relance
-    QString script = QStringLiteral(R"(
+            newAppPath = apps.first();
+            qDebug().noquote() << "📦 Found new app bundle:" << newAppPath;
+
+            // Étape 5 : Renommer si nécessaire
+            QString finalAppPath = QDir(tmpDir).filePath("ProjectPlusFR.app");
+            if (QFileInfo(newAppPath).fileName() != "ProjectPlusFR.app")
+            {
+                QDir().rename(newAppPath, finalAppPath);
+                qDebug().noquote() << "✏️ Renamed to:" << finalAppPath;
+            }
+            else
+            {
+                finalAppPath = newAppPath;
+            }
+
+            // Étape 6 : Dossier cible de l’application actuelle
+            QString currentAppDir = QCoreApplication::applicationDirPath(); // .../Contents/MacOS
+            QString currentContents = QFileInfo(currentAppDir).path();      // .../Contents
+            QString currentBundle = QFileInfo(currentContents).path();      // .../ProjectPlusFR.app
+            QString parentDir = QFileInfo(currentBundle).path();            // .../Documents/testmac/
+
+            qDebug().noquote() << "📁 App current bundle:" << currentBundle;
+            qDebug().noquote() << "📁 Parent dir:" << parentDir;
+
+            // Étape 7 : Script bash pour remplacement complet
+            QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
 sleep 2
@@ -1015,34 +1060,28 @@ echo "🧹 Removing old app..."
 rm -rf "%1"
 echo "🚚 Moving new app..."
 mv -f "%2" "%1"
-echo "✅ Relaunching..."
+echo "✅ Relaunching app..."
 open "%1"
-)").arg(destAppPath, newAppPath);
+)").arg(currentBundle, finalAppPath);
 
-    qDebug().noquote() << "🔁 Relaunch script:\n" << script;
-
-    // Ferme proprement la fenêtre avant relance
-    this->close();
-    QApplication::processEvents();
-
-    // Lance le script dans un shell détaché
-    bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-
-    if (started)
-    {
-        qDebug().noquote() << "✅ Relaunch script started. Exiting app...";
-        QTimer::singleShot(100, [] {
-            std::exit(0);
-        });
-    }
-    else
-    {
-        qWarning().noquote() << "❌ Failed to start relaunch script";
-        QCoreApplication::quit();
-    }
+            // Étape 8 : Exécution et relance
+            qDebug().noquote() << "🚀 Running macOS replacement script...";
+            bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+            if (started)
+            {
+                qDebug().noquote() << "✅ Relaunch script started, exiting...";
+                QTimer::singleShot(100, [] { ::_exit(0); });
+            }
+            else
+            {
+                qWarning().noquote() << "❌ Failed to start relaunch script";
+                QCoreApplication::quit();
+            }
+        }, Qt::QueuedConnection);
 #endif
 
-    const QString zipFile = temporaryDirectory + QDir::separator() + filename;
+
+    const QString zipFile = tmpDir + QDir::separator() + filename;
 
     if (!QFile::exists(zipFile))
     {
@@ -1050,6 +1089,21 @@ open "%1"
         reject();
         return;
     }
+
+    #ifdef __APPLE__
+    // 💡 Déplace le .zip depuis le dossier temporaire initial vers le bon update_tmp
+    QString oldZipPath = temporaryDirectory + QDir::separator() + filename;
+    QString newZipPath = tmpDir + QDir::separator() + filename;
+
+    if (QFile::exists(oldZipPath))
+    {
+        QFile::remove(newZipPath); // au cas où un ancien existe
+        if (QFile::rename(oldZipPath, newZipPath))
+            qDebug().noquote() << "📦 Moved ZIP to correct update_tmp:" << newZipPath;
+        else
+            qWarning().noquote() << "⚠️ Failed to move ZIP to update_tmp!";
+    }
+#endif
 
     QDir().mkpath(tmpDir);
 
