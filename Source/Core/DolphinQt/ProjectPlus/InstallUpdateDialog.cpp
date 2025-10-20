@@ -8,6 +8,8 @@
 #include "InstallUpdateDialog.h"
 #include "DownloadWorker.h"
 
+#include <unistd.h>
+
 #include <QCoreApplication>
 #include <QProcess>
 #include <QDir>
