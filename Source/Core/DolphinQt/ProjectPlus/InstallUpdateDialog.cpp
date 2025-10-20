@@ -943,33 +943,35 @@ void InstallUpdateDialog::install()
 QString tmpDir;
 
 #ifdef __APPLE__
-// 🧩 Étape macOS : gérer un .tar à l'intérieur de l'archive
+// 🧩 Étape macOS : gestion du .tar + remplacement du .app
 
 QDir tmp(tmpDir);
-QString tarPath;
-QStringList tars = tmp.entryList(QStringList() << "*.tar" << "*.tar.gz" << "*.tgz", QDir::Files);
+QStringList tars = tmp.entryList(QStringList()
+    << QStringLiteral("*.tar")
+    << QStringLiteral("*.tar.gz")
+    << QStringLiteral("*.tgz"), QDir::Files);
+
 if (!tars.isEmpty())
 {
-    tarPath = tmp.filePath(tars.first());
+    QString tarPath = tmp.filePath(tars.first());
     qDebug().noquote() << "📦 Found inner TAR archive:" << tarPath;
 
-    // 🔧 1️⃣ Extraire le .tar dans le dossier temporaire
-    QString extractCmd = QString("tar -xf '%1' -C '%2'").arg(tarPath, tmpDir);
-    int result = QProcess::execute("/bin/bash", {"-c", extractCmd});
+    // 🔧 Extraire le .tar
+    QString extractCmd = QStringLiteral("tar -xf '%1' -C '%2'").arg(tarPath, tmpDir);
+    int result = QProcess::execute(QStringLiteral("/bin/bash"),
+                                   QStringList{QStringLiteral("-c"), extractCmd});
     if (result == 0)
     {
         qDebug().noquote() << "✅ Extracted TAR successfully";
-
-        // 🔧 2️⃣ Supprimer le .tar après extraction
         QFile::remove(tarPath);
         qDebug().noquote() << "🧹 Removed inner TAR:" << tarPath;
 
-        // 🔧 3️⃣ Trouver le dossier extrait (ProjectPlusFR ou ProjectPlusFR.app)
+        // Trouver le dossier extrait
         QStringList dirs = tmp.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         QString extractedDir;
         for (const QString& d : dirs)
         {
-            if (d.startsWith("ProjectPlusFR"))
+            if (d.startsWith(QStringLiteral("ProjectPlusFR")))
             {
                 extractedDir = tmp.filePath(d);
                 break;
@@ -978,10 +980,10 @@ if (!tars.isEmpty())
 
         if (!extractedDir.isEmpty())
         {
-            // 🔧 4️⃣ Si ce n’est pas déjà un .app, renommer
-            if (!extractedDir.endsWith(".app"))
+            // 🔧 Renommer si nécessaire
+            if (!extractedDir.endsWith(QStringLiteral(".app")))
             {
-                QString renamed = extractedDir + ".app";
+                QString renamed = extractedDir + QStringLiteral(".app");
                 if (QDir().rename(extractedDir, renamed))
                 {
                     qDebug().noquote() << "📦 Renamed extracted folder to:" << renamed;
@@ -993,17 +995,21 @@ if (!tars.isEmpty())
                 }
             }
 
-            // 🔧 5️⃣ Supprimer l'ancien .app si présent
-            QString oldApp = installationDirectory + "/ProjectPlusFR.app";
+            // 🔧 Supprimer l'ancien .app
+            QString oldApp = installationDirectory + QStringLiteral("/ProjectPlusFR.app");
             if (QFile::exists(oldApp))
             {
                 qDebug().noquote() << "🧹 Removing old app:" << oldApp;
-                QProcess::execute("/bin/bash", {"-c", QString("rm -rf '%1'").arg(oldApp)});
+                QString rmCmd = QStringLiteral("rm -rf '%1'").arg(oldApp);
+                QProcess::execute(QStringLiteral("/bin/bash"),
+                                  QStringList{QStringLiteral("-c"), rmCmd});
             }
 
-            // 🔧 6️⃣ Déplacer la nouvelle app à la place
-            QString moveCmd = QString("mv -f '%1' '%2'").arg(extractedDir, installationDirectory);
-            int moveResult = QProcess::execute("/bin/bash", {"-c", moveCmd});
+            // 🔧 Déplacer la nouvelle app
+            QString moveCmd = QStringLiteral("mv -f '%1' '%2'")
+                                  .arg(extractedDir, installationDirectory);
+            int moveResult = QProcess::execute(QStringLiteral("/bin/bash"),
+                                               QStringList{QStringLiteral("-c"), moveCmd});
             if (moveResult == 0)
                 qDebug().noquote() << "🚀 New app moved successfully to destination";
             else
@@ -1011,7 +1017,8 @@ if (!tars.isEmpty())
         }
         else
         {
-            qWarning().noquote() << "⚠️ Could not find extracted ProjectPlusFR directory inside TAR";
+            qWarning().noquote()
+                << "⚠️ Could not find extracted ProjectPlusFR directory inside TAR";
         }
     }
     else
@@ -1019,7 +1026,32 @@ if (!tars.isEmpty())
         qWarning().noquote() << "❌ Failed to extract TAR (exit code" << result << ")";
     }
 }
+
+// 🚀 Relancer la nouvelle app via script shell
+QString appBundleName = QStringLiteral("ProjectPlusFR.app");
+QString newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
+QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
+
+QString script = QStringLiteral(R"(
+#!/bin/bash
+sleep 1
+echo "🧹 Cleaning up..."
+rm -rf "%2/update_tmp"
+echo "🚀 Moving new app..."
+mv -f "%2/%3" "%1"
+echo "✅ Relaunching app..."
+open "%1"
+)")
+.arg(destAppPath, tmpDir, appBundleName);
+
+qDebug().noquote() << "🔁 Relaunching app with script:\n" << script;
+QProcess::startDetached(QStringLiteral("/bin/bash"),
+                        QStringList{QStringLiteral("-c"), script});
+
+// ✅ Quitter Dolphin pour permettre le remplacement
+QCoreApplication::quit();
 #endif
+
 
  
     const QString zipFile = temporaryDirectory + QDir::separator() + filename;
