@@ -1043,16 +1043,16 @@ QString appBundleName = QStringLiteral("ProjectPlusFR.app");
 QString newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
 QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
 
-QString script = QStringLiteral(R"(
-#!/bin/bash
-sleep 1
-echo "🧹 Cleaning up..."
-rm -rf "%2/update_tmp"
-echo "🚀 Moving new app..."
-mv -f "%2/%3" "$(dirname "%1")"
-echo "✅ Relaunching app..."
-open "$(dirname "%1")/%3"
-)").arg(destAppPath, tmpDir, appBundleName);
+QString script = QStringLiteral(
+    "#!/bin/bash\n"
+    "sleep 1\n"
+    "echo \"🧹 Cleaning up...\"\n"
+    "rm -rf \"%2/update_tmp\"\n"
+    "echo \"🚀 Moving new app...\"\n"
+    "mv -f \"%2/%3\" \"$(dirname \"%1\")\"\n"
+    "echo \"✅ Relaunching app...\"\n"
+    "open \"$(dirname \"%1\")/%3\"\n"
+).arg(destAppPath, tmpDir, appBundleName);
 
 qDebug().noquote() << "🔁 Relaunching app with script:\n" << script;
 QProcess::startDetached(QStringLiteral("/bin/bash"),
