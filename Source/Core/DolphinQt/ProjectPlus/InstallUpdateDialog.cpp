@@ -953,12 +953,12 @@ void InstallUpdateDialog::install()
     // ✅ Corrige le dossier temporaire pour macOS portable
 QString tmpDir = temporaryDirectory;
 
-// ✅ Correction spécifique macOS : utiliser le dossier de l’app au lieu de /private/var
 #ifdef __APPLE__
-tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath("update_tmp");
+tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("update_tmp"));
 QDir().mkpath(tmpDir);
 qDebug().noquote() << "📁 Using portable macOS tmpDir:" << tmpDir;
 #endif
+
 
 #ifdef __APPLE__
 // 🧩 Étape macOS : gestion du .tar + remplacement du .app
