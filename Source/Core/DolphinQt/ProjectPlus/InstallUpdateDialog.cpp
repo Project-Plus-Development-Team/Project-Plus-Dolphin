@@ -861,10 +861,13 @@ if (!curlTimer)
     curlTimer->start();
 }
 
-connect(curl, &QProcess::readyReadStandardOutput, this, [this, curl, uiProgress]() {
-    const QString out = QString::fromUtf8(curl->readAllStandardOutput());
 
-    // Exemple : " 25  100M   25 25.2M    0     0  10.2M      0  0:00:09  0:00:09  0:00:09 10.2M/s"
+
+// 🧭 Lecture de la sortie d’erreur (macOS / Unix)
+connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
+    const QString out = QString::fromUtf8(curl->readAllStandardError());
+    qDebug().noquote() << "📡 curl output:" << out;
+
     QRegularExpression re(QStringLiteral(
         R"(\s*(\d{1,3})\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([\d\.]+[KMG]?B\/s))"));
     auto matches = re.globalMatch(out);
@@ -874,7 +877,6 @@ connect(curl, &QProcess::readyReadStandardOutput, this, [this, curl, uiProgress]
         int percent = m.captured(1).toInt();
         QString speed = m.captured(2).trimmed();
 
-        // 🚫 Ignore les resets (par exemple 10% → 0%)
         if (percent < lastPercent && lastPercent - percent < 90)
             continue;
 
@@ -1176,25 +1178,35 @@ echo "✅ Relaunching app..."
 open "%1"
 )") // 👈 fermer ici
 .arg(destAppPath, tmpDir, appBundleName); // 👈 puis appliquer .arg()
+#endif //_WIN32
 
-
+#ifdef __APPLE__
 // 🔁 Lance le script dans un shell séparé
 qDebug().noquote() << "🚀 Running macOS update script after quit";
-QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-
-// ✅ Quitte Dolphin pour permettre le remplacement
+bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+if (started)
+{
+    qDebug().noquote() << "✅ Relaunch script started, exiting immediately";
+    QTimer::singleShot(100, [] {
+        ::_exit(0); // ⚠️ quitte immédiatement sans passer par l’event loop Qt
+    });
+}
+else
+{
+    qWarning().noquote() << "❌ Failed to start relaunch script";
+    QCoreApplication::quit();
+}
+#else
+// ✅ Sur les autres plateformes : quitte normalement
 QCoreApplication::quit();
-
 #endif
 
-// ✅ Quitte Dolphin immédiatement pour permettre la copie
-QCoreApplication::quit();
+        }, Qt::QueuedConnection); // ← ferme le lambda du connect
+    });                            // ← ferme le connect
+    thread->start();               // ← démarre le thread
+}                                   // ← ferme la fonction
 
-        }, Qt::QueuedConnection);
-    });
 
-    thread->start();
-}
 
 
 
