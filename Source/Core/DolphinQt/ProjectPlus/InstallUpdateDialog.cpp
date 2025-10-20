@@ -1161,8 +1161,8 @@ QProcess::startDetached(
 #else
 // 🧠 macOS/Linux : remplacement fiable + relance automatique
 QString appBundleName = QStringLiteral("ProjectPlusFR.app");
-QString newAppPath = QString("%1/%2").arg(tmpDir, appBundleName);
-QString destAppPath = QString("%1/%2").arg(installationDirectory, appBundleName);
+QString newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
+QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
 
 // 🔧 Script bash externe : attend la fermeture, déplace, relance
 QString script = QStringLiteral(R"(
