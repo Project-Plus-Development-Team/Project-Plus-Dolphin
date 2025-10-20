@@ -870,11 +870,12 @@ if (!curlTimer)
 // 🧭 Lecture de la sortie d’erreur (macOS / Unix)
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
     const QString out = QString::fromUtf8(curl->readAllStandardError());
+    if (out.isEmpty()) return;
 
-    // Exemple macOS/Linux :
+    // Exemple de ligne curl :
     //  25  100M   25 25.2M    0     0  10.2M      0  0:00:09  0:00:09  0:00:09 10.2M/s
     static QRegularExpression re(QStringLiteral(
-        R"(\s*(\d{1,3})\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([\d\.]+[KMG]?B\/s))"));
+        R"(\s*(\d{1,3})\s+[0-9A-Za-z\.]+[KMG]?\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([\d\.]+[KMG]?B\/s))"));
 
     auto matches = re.globalMatch(out);
     static int lastPercent = 0;
@@ -884,7 +885,6 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
         int percent = m.captured(1).toInt();
         QString speed = m.captured(2).trimmed();
 
-        // 🚫 Ignore les resets (quand curl repasse de 100% à 0%)
         if (percent < lastPercent && lastPercent - percent < 90)
             continue;
 
@@ -892,6 +892,7 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
         uiProgress(percent, QStringLiteral("curl: %1% (%2)").arg(percent).arg(speed));
     }
 });
+
 
 
 connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
@@ -950,8 +951,14 @@ void InstallUpdateDialog::install()
     qDebug().noquote() << QStringLiteral("🧩 Starting installation...");
 
     // ✅ Corrige le dossier temporaire pour macOS portable
-QString tmpDir;
-tmpDir = temporaryDirectory;
+QString tmpDir = temporaryDirectory;
+
+// ✅ Correction spécifique macOS : utiliser le dossier de l’app au lieu de /private/var
+#ifdef __APPLE__
+tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath("update_tmp");
+QDir().mkpath(tmpDir);
+qDebug().noquote() << "📁 Using portable macOS tmpDir:" << tmpDir;
+#endif
 
 #ifdef __APPLE__
 // 🧩 Étape macOS : gestion du .tar + remplacement du .app
