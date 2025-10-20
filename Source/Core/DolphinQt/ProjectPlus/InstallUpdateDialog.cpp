@@ -1128,34 +1128,27 @@ QProcess::startDetached(
 );
 #else
 // 🧠 macOS/Linux : remplacement fiable + relance automatique
-QString appBundleName = "ProjectPlusFR.app";
+QString appBundleName = QStringLiteral("ProjectPlusFR.app");
 QString newAppPath = QString("%1/%2").arg(tmpDir, appBundleName);
 QString destAppPath = QString("%1/%2").arg(installationDirectory, appBundleName);
 
 // 🔧 Script bash externe : attend la fermeture, déplace, relance
 QString script = QStringLiteral(R"(
+#!/bin/bash
 sleep 1
-APP_PATH="%1"
-TMP_PATH="%2"
-
-echo "🔪 Closing old app..."
-osascript -e 'tell application "ProjectPlusFR" to quit'
-sleep 2
-
-echo "🚚 Moving updated app..."
-rm -rf "$APP_PATH"
-mv -f "$TMP_PATH/%3" "$(dirname "$APP_PATH")"
-
 echo "🧹 Cleaning up..."
-rm -rf "$TMP_PATH"
+rm -rf "%2/update_tmp"
+echo "🚀 Moving new app..."
+mv -f "%2/%3" "%1"
+echo "✅ Relaunching app..."
+open "%1"
+)") // 👈 fermer ici
+.arg(destAppPath, tmpDir, appBundleName); // 👈 puis appliquer .arg()
 
-echo "🔁 Relaunching new version..."
-open "$APP_PATH"
-)").arg(destAppPath, tmpDir, appBundleName);
 
 // 🔁 Lance le script dans un shell séparé
 qDebug().noquote() << "🚀 Running macOS update script after quit";
-QProcess::startDetached("/bin/bash", {"-c", script});
+QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
 
 // ✅ Quitte Dolphin pour permettre le remplacement
 QCoreApplication::quit();
