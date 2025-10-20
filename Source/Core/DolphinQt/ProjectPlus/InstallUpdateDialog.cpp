@@ -845,7 +845,8 @@ void InstallUpdateDialog::startHttpFallback(const QString& sdUrl,
     // macOS/Linux fallback (curl)
    // 🐧 macOS/Linux fallback (curl avec vitesse + progression fluide)
 QProcess* curl = new QProcess(this);
-curl->setProcessChannelMode(QProcess::MergedChannels);
+curl->setProcessChannelMode(QProcess::SeparateChannels); 
+
 
 // 🧠 Variables pour lissage et progression stable
 static double curlDisplayed = 0.0;
@@ -868,36 +869,34 @@ if (!curlTimer)
 
 
 // ⚠️ curl imprime la barre sur STDERR, pas STDOUT.
-connect(curl, &QProcess::readyReadStandardError, this,
-        [this, curl, uiProgress]()
-{
-    const QString err = QString::fromUtf8(curl->readAllStandardError());
-    // Exemple de ligne: " 25  100M   25 25.2M    0     0  10.2M      0  0:00:09  0:00:09  0:00:09 10.2M/s"
-    // On récupère le premier pourcentage rencontré et la dernière "vitesse/s" présente.
+// Progression curl: lire STDERR
+connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
+    const QString chunk = QString::fromUtf8(curl->readAllStandardError());
+
+    // On prend le DERNIER pourcentage du chunk, au format 10% ou 10.0%
     static int lastPercent = 0;
+    int foundPercent = -1;
 
-    QRegularExpression percRe(QStringLiteral(R"((\s|^)(\d{1,3})(?=\s))"));
-    QRegularExpression spdRe(QStringLiteral(R"(([\d\.]+[KMG]?B/s))"));
-
-    auto percIt = percRe.globalMatch(err);
-    int percent = -1;
-    while (percIt.hasNext()) {
-        auto m = percIt.next();
-        percent = m.captured(2).toInt(); // on prend la dernière valeur vue dans ce chunk
+    // Matche 7%, 42%, 99.9%, 100%
+    QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%)"));
+    auto it = re.globalMatch(chunk);
+    while (it.hasNext()) {
+        auto m = it.next();
+        foundPercent = qBound(0, static_cast<int>(m.captured(1).toDouble()), 100);
     }
-    auto spdMatch = spdRe.match(err);
-    const QString speed = spdMatch.hasMatch() ? spdMatch.captured(1) : QStringLiteral("?");
 
-    if (percent >= 0) {
-        // Évite les “reset” 10%→0% quand la ligne de statut se ré-écrit
-        if (!(percent < lastPercent && (lastPercent - percent) < 90))
-            lastPercent = percent;
-
-        uiProgress(lastPercent, QStringLiteral("curl: %1% (%2)")
-                               .arg(lastPercent)
-                               .arg(speed));
+    if (foundPercent >= 0) {
+        // Évite les faux “reset” quand la barre se réécrit (ex: 12% → 0%)
+        if (!(foundPercent < lastPercent && (lastPercent - foundPercent) < 90)) {
+            lastPercent = foundPercent;
+            uiProgress(lastPercent, QStringLiteral("curl: %1%").arg(lastPercent));
+        }
     }
+
+    // (facultatif) log brut pour debug
+    // if (!chunk.trimmed().isEmpty()) qDebug().noquote() << "[curl]" << chunk.trimmed();
 });
+
 
 
 
@@ -930,12 +929,12 @@ connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
 
 // 🚀 Lancement du téléchargement
 qDebug().noquote() << "🌐 Launching curl:" << sdUrl << "→" << sdPath;
+
 curl->start(QStringLiteral("curl"),
-            { QStringLiteral("-L"),
-              QStringLiteral("--progress-bar"),
-              QStringLiteral("--speed-time"), QStringLiteral("5"),
-              QStringLiteral("--speed-limit"), QStringLiteral("1"),
-              QStringLiteral("-o"), sdPath,
+            { QStringLiteral("-L"),             // suit les redirections
+              QStringLiteral("--progress-bar"), // affiche la barre sur stderr
+              QStringLiteral("--no-buffer"),    // flush immédiat
+              QStringLiteral("-o"), sdPath,     // sortie dans sd.raw
               sdUrl });
 
 #endif
@@ -958,12 +957,39 @@ void InstallUpdateDialog::install()
     qDebug().noquote() << QStringLiteral("🧩 Starting installation...");
 
     // ✅ Corrige le dossier temporaire pour macOS portable
+   // 🔧 Corrige temporairement le chemin si on est dans App Translocation
     QString tmpDir = temporaryDirectory;
+if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
+{
+    qDebug().noquote() << "⚠️ Detected macOS App Translocation → remapping temporary directory";
+
+    QString appDir = QCoreApplication::applicationDirPath();
+    QDir dir(appDir);
+
+    // remonte jusqu'à portable.txt
+    while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
+        dir.cdUp();
+
+    if (QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
+    {
+        QString baseDir = dir.absolutePath();
+        tmpDir = QDir(baseDir).filePath(QStringLiteral("Contents/MacOS/update_tmp"));
+        QDir().mkpath(tmpDir);
+        qDebug().noquote() << "✅ Using corrected update_tmp path:" << tmpDir;
+    }
+}
+
 
 #ifdef __APPLE__
-    tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("update_tmp"));
+    // 📦 Corrige le dossier temporaire pour extraire à côté du .app
+    QString appDir = QCoreApplication::applicationDirPath();     // .../Contents/MacOS
+    QString contentsDir = QFileInfo(appDir).path();              // .../Contents
+    QString appBundleDir = QFileInfo(contentsDir).path();        // .../ProjectPlusFR.app (bundle racine)
+    QString parentDir = QFileInfo(appBundleDir).path();          // dossier parent du .app
+    tmpDir = QDir(parentDir).filePath(QStringLiteral("update_tmp"));
+
     QDir().mkpath(tmpDir);
-    qDebug().noquote() << "📦 macOS update_tmp:" << tmpDir;
+    qDebug().noquote() << "📦 macOS fixed update_tmp:" << tmpDir;
 
     // Cherche le .app extrait dans update_tmp
     QDir d(tmpDir);
@@ -985,19 +1011,23 @@ void InstallUpdateDialog::install()
     qDebug().noquote() << "📁 Parent app dir:" << parentDir;
 
     // Script bash de remplacement + relance
-    QString script = QStringLiteral(R"(
+   QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
-sleep 2
-echo "🧹 Removing old app..."
+sleep 1
+echo "🧹 Cleaning up old app..."
 rm -rf "%1"
-echo "🚚 Moving new app..."
-mv -f "%2" "%1"
-echo "✅ Relaunching..."
+echo "🚚 Moving new app bundle..."
+mv -f "%2/%3" "%1"
+echo "✅ Relaunching updated app..."
 open "%1"
-)").arg(parentDir, newAppPath);
+)").arg(destAppPath, tmpDir, appBundleName);
+
 
     qDebug().noquote() << "🔁 Relaunch script:\n" << script;
+
+    this->close();
+QApplication::processEvents();
 
     // Lance le script dans un shell détaché
     bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
