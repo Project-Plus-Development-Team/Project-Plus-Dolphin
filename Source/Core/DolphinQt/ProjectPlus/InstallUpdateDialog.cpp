@@ -8,7 +8,9 @@
 #include "InstallUpdateDialog.h"
 #include "DownloadWorker.h"
 
+#ifdef __APPLE__
 #include <unistd.h>
+#endif
 
 #include <QCoreApplication>
 #include <QProcess>
