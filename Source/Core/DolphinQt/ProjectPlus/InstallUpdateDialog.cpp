@@ -958,34 +958,34 @@ void InstallUpdateDialog::install()
     qDebug().noquote() << QStringLiteral("🧩 Starting installation...");
 
     // ✅ Corrige le dossier temporaire pour macOS portable
-QString tmpDir = temporaryDirectory;
+    QString tmpDir = temporaryDirectory;
 
 #ifdef __APPLE__
-tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("update_tmp"));
-QDir().mkpath(tmpDir);
-qDebug().noquote() << "📦 macOS update_tmp:" << tmpDir;
+    tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("update_tmp"));
+    QDir().mkpath(tmpDir);
+    qDebug().noquote() << "📦 macOS update_tmp:" << tmpDir;
 
-// Cherche le .app extrait dans update_tmp
-QDir d(tmpDir);
-QStringList apps = d.entryList(QStringList() << QStringLiteral("*.app"), QDir::Dirs | QDir::NoDotAndDotDot);
-if (apps.isEmpty())
-{
-    qWarning().noquote() << "❌ Aucun .app trouvé dans update_tmp";
-    return;
-}
+    // Cherche le .app extrait dans update_tmp
+    QDir d(tmpDir);
+    QStringList apps = d.entryList(QStringList() << QStringLiteral("*.app"), QDir::Dirs | QDir::NoDotAndDotDot);
+    if (apps.isEmpty())
+    {
+        qWarning().noquote() << "❌ Aucun .app trouvé dans update_tmp";
+        return;
+    }
 
-QString newAppPath = d.filePath(apps.first());
-qDebug().noquote() << "📦 Found new app:" << newAppPath;
+    QString newAppPath = d.filePath(apps.first());
+    qDebug().noquote() << "📦 Found new app:" << newAppPath;
 
-// Récupère le dossier parent du .app actuel
-QString appDir = QCoreApplication::applicationDirPath(); // .../Contents/MacOS
-QString parentDir = QFileInfo(appDir).path();            // .../Contents
-parentDir = QFileInfo(parentDir).path();                 // .../Project-Plus-Dolphin-macOS-sha[…].app
+    // Récupère le dossier parent du .app actuel
+    QString appDir = QCoreApplication::applicationDirPath(); // .../Contents/MacOS
+    QString parentDir = QFileInfo(appDir).path();            // .../Contents
+    parentDir = QFileInfo(parentDir).path();                 // .../Project-Plus-Dolphin.app
 
-qDebug().noquote() << "📁 Parent app dir:" << parentDir;
+    qDebug().noquote() << "📁 Parent app dir:" << parentDir;
 
-// Script bash de remplacement + relance
-QString script = QStringLiteral(R"(
+    // Script bash de remplacement + relance
+    QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
 sleep 2
@@ -995,38 +995,32 @@ echo "🚚 Moving new app..."
 mv -f "%2" "%1"
 echo "✅ Relaunching..."
 open "%1"
-)")
-.arg(parentDir, newAppPath);
+)").arg(parentDir, newAppPath);
 
-qDebug().noquote() << "🔁 Relaunch script:\n" << script;
+    qDebug().noquote() << "🔁 Relaunch script:\n" << script;
 
-// Lance le script dans un shell détaché
-bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+    // Lance le script dans un shell détaché
+    bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
 
-if (started)
-{
-    qDebug().noquote() << "✅ Relaunch script started. Exiting app...";
-    // Laisse 100ms pour lancer le script puis quitte brutalement (évite deadlocks)
-    QTimer::singleShot(100, [] {
-        std::exit(0);  // ⚡ quitte tout de suite, sans attendre l’event loop
-    });
-}
-else
-{
-    qWarning().noquote() << "❌ Failed to start relaunch script";
-    QCoreApplication::quit();
-}
+    if (started)
+    {
+        qDebug().noquote() << "✅ Relaunch script started. Exiting app...";
+        QTimer::singleShot(100, [] {
+            std::exit(0);
+        });
+    }
+    else
+    {
+        qWarning().noquote() << "❌ Failed to start relaunch script";
+        QCoreApplication::quit();
+    }
 #endif
 
-
-
- 
     const QString zipFile = temporaryDirectory + QDir::separator() + filename;
 
     if (!QFile::exists(zipFile))
     {
-        QMessageBox::critical(this, QStringLiteral("Error"),
-                              QStringLiteral("ZIP file missing!"));
+        QMessageBox::critical(this, QStringLiteral("Error"), QStringLiteral("ZIP file missing!"));
         reject();
         return;
     }
@@ -1060,8 +1054,7 @@ else
 
             if (!success)
             {
-                QMessageBox::critical(nullptr, QStringLiteral("Error"),
-                                      QStringLiteral("Failed to extract ZIP file."));
+                QMessageBox::critical(nullptr, QStringLiteral("Error"), QStringLiteral("Failed to extract ZIP file."));
                 return;
             }
 
@@ -1089,50 +1082,39 @@ else
 
             qDebug().noquote() << QStringLiteral("♻️ Preparing for restart...");
 
-            // ✅ Ferme la fenêtre de l’installeur
             this->accept();
 
 #ifdef _WIN32
-// ⚙️ Script PowerShell pour remplacer tous les fichiers pendant que Dolphin est fermé
-QString psScript = QStringLiteral(R"(
+            QString psScript = QStringLiteral(R"(
     $tmp = "%1";
     $dest = "%2";
 
     Start-Sleep -Seconds 1;
 
-    # 🔪 Ferme tout process Dolphin encore actif
     Get-Process "Dolphin" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
     Start-Sleep -Seconds 1;
 
     Write-Host "🚚 Moving update files from $tmp to $dest...";
     robocopy $tmp $dest /E /MOVE /R:3 /W:1 | Out-Null;
 
-    # 🧹 Supprime le dossier temporaire si encore là
     if (Test-Path $tmp) { Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 
     Write-Host "✅ Update applied. Restarting Dolphin...";
     Start-Process "$dest\\Dolphin.exe";
-)") // fin du script inline PowerShell
-.arg(QDir::toNativeSeparators(tmpDir),
-     QDir::toNativeSeparators(installationDirectory));
+)").arg(QDir::toNativeSeparators(tmpDir),
+         QDir::toNativeSeparators(installationDirectory));
 
-qDebug().noquote() << QStringLiteral("🚀 Launching PowerShell update finalizer...");
-
-QProcess::startDetached(
-    QStringLiteral("powershell.exe"),
-    QStringList()
-        << QStringLiteral("-NoProfile")
-        << QStringLiteral("-ExecutionPolicy") << QStringLiteral("Bypass")
-        << QStringLiteral("-Command") << psScript
-);
+            qDebug().noquote() << QStringLiteral("🚀 Launching PowerShell update finalizer...");
+            QProcess::startDetached(QStringLiteral("powershell.exe"),
+                {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
+                 QStringLiteral("Bypass"), QStringLiteral("-Command"), psScript});
 #else
-// 🧠 macOS/Linux : remplacement fiable + relance automatique
-QString appBundleName = QStringLiteral("ProjectPlusFR.app");
-QString newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
-QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
+            // 🧠 macOS/Linux : remplacement fiable + relance automatique
+            QString appBundleName = QStringLiteral("ProjectPlusFR.app");
+            QString newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
+            QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
 
-// 🔧 Script bash externe : attend la fermeture, déplace, relance
-QString script = QStringLiteral(R"(
+            QString script = QStringLiteral(R"(
 #!/bin/bash
 sleep 1
 echo "🧹 Cleaning up..."
@@ -1141,35 +1123,33 @@ echo "🚀 Moving new app..."
 mv -f "%2/%3" "%1"
 echo "✅ Relaunching app..."
 open "%1"
-)") // 👈 fermer ici
-.arg(destAppPath, tmpDir, appBundleName); // 👈 puis appliquer .arg()
-#endif //_WIN32
+)").arg(destAppPath, tmpDir, appBundleName);
 
 #ifdef __APPLE__
-// 🔁 Lance le script dans un shell séparé
-qDebug().noquote() << "🚀 Running macOS update script after quit";
-bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-if (started)
-{
-    qDebug().noquote() << "✅ Relaunch script started, exiting immediately";
-    QTimer::singleShot(100, [] {
-        ::_exit(0); // ⚠️ quitte immédiatement sans passer par l’event loop Qt
-    });
-}
-else
-{
-    qWarning().noquote() << "❌ Failed to start relaunch script";
-    QCoreApplication::quit();
-}
+            qDebug().noquote() << "🚀 Running macOS update script after quit";
+            bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+            if (started)
+            {
+                qDebug().noquote() << "✅ Relaunch script started, exiting immediately";
+                QTimer::singleShot(100, [] {
+                    ::_exit(0);
+                });
+            }
+            else
+            {
+                qWarning().noquote() << "❌ Failed to start relaunch script";
+                QCoreApplication::quit();
+            }
 #else
-// ✅ Sur les autres plateformes : quitte normalement
-QCoreApplication::quit();
+            QCoreApplication::quit();
 #endif
+#endif
+        }, Qt::QueuedConnection);
+    });
+    thread->start();
+}
 
-        }, Qt::QueuedConnection); // ← ferme le lambda du connect
-    });                            // ← ferme le connect
-    thread->start();               // ← démarre le thread
-}                                   // ← ferme la fonction
+
 
 
 
