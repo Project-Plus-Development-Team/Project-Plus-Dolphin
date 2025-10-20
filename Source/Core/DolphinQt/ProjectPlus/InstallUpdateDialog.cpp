@@ -870,25 +870,29 @@ if (!curlTimer)
 // 🧭 Lecture de la sortie d’erreur (macOS / Unix)
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
     const QString out = QString::fromUtf8(curl->readAllStandardError());
-    qDebug().noquote() << "📡 curl output:" << out;
 
-    QRegularExpression re(QStringLiteral(
+    // Exemple macOS/Linux :
+    //  25  100M   25 25.2M    0     0  10.2M      0  0:00:09  0:00:09  0:00:09 10.2M/s
+    static QRegularExpression re(QStringLiteral(
         R"(\s*(\d{1,3})\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+([\d\.]+[KMG]?B\/s))"));
+
     auto matches = re.globalMatch(out);
+    static int lastPercent = 0;
 
     while (matches.hasNext()) {
         auto m = matches.next();
         int percent = m.captured(1).toInt();
         QString speed = m.captured(2).trimmed();
 
+        // 🚫 Ignore les resets (quand curl repasse de 100% à 0%)
         if (percent < lastPercent && lastPercent - percent < 90)
             continue;
 
         lastPercent = percent;
-        curlTarget = static_cast<double>(percent);
         uiProgress(percent, QStringLiteral("curl: %1% (%2)").arg(percent).arg(speed));
     }
 });
+
 
 connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
         this, [=](int e, QProcess::ExitStatus) {
@@ -947,6 +951,7 @@ void InstallUpdateDialog::install()
 
     // ✅ Corrige le dossier temporaire pour macOS portable
 QString tmpDir;
+tmpDir = temporaryDirectory;
 
 #ifdef __APPLE__
 // 🧩 Étape macOS : gestion du .tar + remplacement du .app
@@ -1044,11 +1049,10 @@ sleep 1
 echo "🧹 Cleaning up..."
 rm -rf "%2/update_tmp"
 echo "🚀 Moving new app..."
-mv -f "%2/%3" "%1"
+mv -f "%2/%3" "$(dirname "%1")"
 echo "✅ Relaunching app..."
-open "%1"
-)")
-.arg(destAppPath, tmpDir, appBundleName);
+open "$(dirname "%1")/%3"
+)").arg(destAppPath, tmpDir, appBundleName);
 
 qDebug().noquote() << "🔁 Relaunching app with script:\n" << script;
 QProcess::startDetached(QStringLiteral("/bin/bash"),
