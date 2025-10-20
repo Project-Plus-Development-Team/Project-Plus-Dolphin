@@ -943,17 +943,84 @@ void InstallUpdateDialog::install()
 QString tmpDir;
 
 #ifdef __APPLE__
-// On veut créer update_tmp à côté du .app, pas dedans
-QDir baseDir = QFileInfo(installationDirectory).absoluteDir();
-while (!baseDir.isRoot() && !baseDir.path().endsWith(".app"))
-    baseDir.cdUp(); // remonte jusqu’à ProjectPlusFR.app
+// 🧩 Étape macOS : gérer un .tar à l'intérieur de l'archive
 
-// Puis on remonte encore un cran pour arriver au dossier "P-FR"
-baseDir.cdUp();
-tmpDir = baseDir.filePath("update_tmp");
-#else
-tmpDir = installationDirectory + QDir::separator() + QStringLiteral("update_tmp");
+QDir tmp(tmpDir);
+QString tarPath;
+QStringList tars = tmp.entryList(QStringList() << "*.tar" << "*.tar.gz" << "*.tgz", QDir::Files);
+if (!tars.isEmpty())
+{
+    tarPath = tmp.filePath(tars.first());
+    qDebug().noquote() << "📦 Found inner TAR archive:" << tarPath;
+
+    // 🔧 1️⃣ Extraire le .tar dans le dossier temporaire
+    QString extractCmd = QString("tar -xf '%1' -C '%2'").arg(tarPath, tmpDir);
+    int result = QProcess::execute("/bin/bash", {"-c", extractCmd});
+    if (result == 0)
+    {
+        qDebug().noquote() << "✅ Extracted TAR successfully";
+
+        // 🔧 2️⃣ Supprimer le .tar après extraction
+        QFile::remove(tarPath);
+        qDebug().noquote() << "🧹 Removed inner TAR:" << tarPath;
+
+        // 🔧 3️⃣ Trouver le dossier extrait (ProjectPlusFR ou ProjectPlusFR.app)
+        QStringList dirs = tmp.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        QString extractedDir;
+        for (const QString& d : dirs)
+        {
+            if (d.startsWith("ProjectPlusFR"))
+            {
+                extractedDir = tmp.filePath(d);
+                break;
+            }
+        }
+
+        if (!extractedDir.isEmpty())
+        {
+            // 🔧 4️⃣ Si ce n’est pas déjà un .app, renommer
+            if (!extractedDir.endsWith(".app"))
+            {
+                QString renamed = extractedDir + ".app";
+                if (QDir().rename(extractedDir, renamed))
+                {
+                    qDebug().noquote() << "📦 Renamed extracted folder to:" << renamed;
+                    extractedDir = renamed;
+                }
+                else
+                {
+                    qWarning().noquote() << "⚠️ Failed to rename extracted folder to .app";
+                }
+            }
+
+            // 🔧 5️⃣ Supprimer l'ancien .app si présent
+            QString oldApp = installationDirectory + "/ProjectPlusFR.app";
+            if (QFile::exists(oldApp))
+            {
+                qDebug().noquote() << "🧹 Removing old app:" << oldApp;
+                QProcess::execute("/bin/bash", {"-c", QString("rm -rf '%1'").arg(oldApp)});
+            }
+
+            // 🔧 6️⃣ Déplacer la nouvelle app à la place
+            QString moveCmd = QString("mv -f '%1' '%2'").arg(extractedDir, installationDirectory);
+            int moveResult = QProcess::execute("/bin/bash", {"-c", moveCmd});
+            if (moveResult == 0)
+                qDebug().noquote() << "🚀 New app moved successfully to destination";
+            else
+                qWarning().noquote() << "❌ Failed to move new app (code" << moveResult << ")";
+        }
+        else
+        {
+            qWarning().noquote() << "⚠️ Could not find extracted ProjectPlusFR directory inside TAR";
+        }
+    }
+    else
+    {
+        qWarning().noquote() << "❌ Failed to extract TAR (exit code" << result << ")";
+    }
+}
 #endif
+
  
     const QString zipFile = temporaryDirectory + QDir::separator() + filename;
 
