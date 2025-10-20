@@ -961,7 +961,7 @@ void InstallUpdateDialog::install()
 QString tmpDir = temporaryDirectory;
 
 #ifdef __APPLE__
-QString tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("update_tmp"));
+tmpDir = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("update_tmp"));
 QDir().mkpath(tmpDir);
 qDebug().noquote() << "📦 macOS update_tmp:" << tmpDir;
 
