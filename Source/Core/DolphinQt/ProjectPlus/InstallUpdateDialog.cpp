@@ -1003,31 +1003,27 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
     QString newAppPath = d.filePath(apps.first());
     qDebug().noquote() << "📦 Found new app:" << newAppPath;
 
-    // Récupère le dossier parent du .app actuel
-    QString appDir = QCoreApplication::applicationDirPath(); // .../Contents/MacOS
-    QString parentDir = QFileInfo(appDir).path();            // .../Contents
-    parentDir = QFileInfo(parentDir).path();                 // .../Project-Plus-Dolphin.app
-
-    qDebug().noquote() << "📁 Parent app dir:" << parentDir;
+    // Chemin complet de l’ancienne app à remplacer
+    QString destAppPath = appBundleDir;
 
     // Script bash de remplacement + relance
-   QString script = QStringLiteral(R"(
+    QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
-sleep 1
-echo "🧹 Cleaning up old app..."
+sleep 2
+echo "🧹 Removing old app..."
 rm -rf "%1"
-echo "🚚 Moving new app bundle..."
-mv -f "%2/%3" "%1"
-echo "✅ Relaunching updated app..."
+echo "🚚 Moving new app..."
+mv -f "%2" "%1"
+echo "✅ Relaunching..."
 open "%1"
-)").arg(destAppPath, tmpDir, appBundleName);
-
+)").arg(destAppPath, newAppPath);
 
     qDebug().noquote() << "🔁 Relaunch script:\n" << script;
 
+    // Ferme proprement la fenêtre avant relance
     this->close();
-QApplication::processEvents();
+    QApplication::processEvents();
 
     // Lance le script dans un shell détaché
     bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
