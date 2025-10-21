@@ -896,26 +896,49 @@ if (!curlTimer)
 
 
 
-// --- Suivi de progression stable ---
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
-    QByteArray output = curl->readAllStandardError();
-    QList<QByteArray> lines = output.split('\r');
+    const QString chunk = QString::fromUtf8(curl->readAllStandardError());
 
-    for (const QByteArray& line : lines)
-    {
-        QString text = QString::fromUtf8(line).trimmed();
-        if (text.isEmpty() || !text.contains(QLatin1Char('%')))
-            continue;
+    static int lastPercent = 0;
+    static int lastGlobalPercent = -1;
+    static QString lastSpeed;
+    int foundPercent = -1;
+    QString foundSpeed;
 
-        QRegularExpression re(QStringLiteral(R"((\d{1,3})%)"));
-        QRegularExpressionMatch match = re.match(text);
-        if (match.hasMatch())
-        {
-            int percent = match.captured(1).toInt();
-            uiProgress(percent, QStringLiteral("Downloading..."));
+    // 🧩 Regex pour trouver le % et la vitesse (ex: "12%  123k" ou "85%  4.5M")
+    QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%\s+[\d\.]+\w?\s+([\d\.]+)([kM]?)/s)"));
+    auto it = re.globalMatch(chunk);
+    while (it.hasNext()) {
+        auto m = it.next();
+        foundPercent = qBound(0, static_cast<int>(m.captured(1).toDouble()), 100);
+        foundSpeed = m.captured(2) + m.captured(3) + QStringLiteral("B/s");
+    }
+
+    if (foundPercent >= 0) {
+        // Ignore les réécritures temporaires (ex: 12% → 0%)
+        if (!(foundPercent < lastPercent && (lastPercent - foundPercent) < 90)) {
+            lastPercent = foundPercent;
+
+            // 🧩 Correction du clignotement et mise à jour de la vitesse
+            if (foundPercent != lastGlobalPercent || foundSpeed != lastSpeed) {
+                lastGlobalPercent = foundPercent;
+                lastSpeed = foundSpeed;
+
+                QString text = QStringLiteral("Downloading: %1%").arg(foundPercent);
+                if (!foundSpeed.isEmpty())
+                    text += QStringLiteral(" (%1)").arg(foundSpeed);
+
+                uiProgress(foundPercent, text);
+            }
         }
     }
+
+    // (facultatif, pour debug)
+    // if (!chunk.trimmed().isEmpty()) qDebug().noquote() << "[curl]" << chunk.trimmed();
 });
+
+
+
 
 
 
@@ -1006,6 +1029,55 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
         qDebug().noquote() << "ℹ️ ZIP not yet downloaded, waiting for completion...";
 
 
+   
+
+    if (!QFile::exists(zipFile))
+    {
+        QMessageBox::critical(this, QStringLiteral("Error"), QStringLiteral("ZIP file missing!"));
+        reject();
+        return;
+    }
+
+    QDir().mkpath(tmpDir);
+
+    label->setText(QStringLiteral("Step 2/2: Installing update..."));
+    stepLabel->setText(QStringLiteral("Extracting files..."));
+    stepProgressBar->setValue(0);
+    progressBar->setValue(75);
+
+    // --- Thread d’extraction ---
+    QThread* thread = new QThread(nullptr);
+
+    connect(thread, &QThread::started, this, [this, zipFile, tmpDir, thread]() {
+        bool success = unzipFile(zipFile.toStdString(), tmpDir.toStdString(),
+            [this](int current, int total)
+            {
+                const int percent = (total > 0) ? (current * 100 / total) : 0;
+
+                QMetaObject::invokeMethod(QApplication::instance(), [=]() {
+                    stepProgressBar->setValue(percent);
+                    stepLabel->setText(QStringLiteral("Extracting: %1%").arg(percent));
+                    progressBar->setValue(75 + (percent * 0.25));
+                }, Qt::QueuedConnection);
+            });
+
+        QMetaObject::invokeMethod(QApplication::instance(), [=]() {
+            thread->quit();
+            thread->deleteLater();
+
+            if (!success)
+            {
+                QMessageBox::critical(nullptr, QStringLiteral("Error"), QStringLiteral("Failed to extract ZIP file."));
+                return;
+            }
+
+            QFile::remove(zipFile);
+            qDebug().noquote() << QStringLiteral("✅ ZIP extracted to temporary folder:") << tmpDir;
+
+            stepLabel->setText(QStringLiteral("Finalizing update..."));
+            stepProgressBar->setValue(100);
+            progressBar->setValue(100);
+
 #ifdef __APPLE__
         // --------------------------------------------------------------
         // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
@@ -1070,92 +1142,63 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             }
 
             // Étape 6 : Dossier cible de l’application actuelle
-            QString currentAppDir = QCoreApplication::applicationDirPath(); // .../Contents/MacOS
-            QString currentContents = QFileInfo(currentAppDir).path();      // .../Contents
-            QString currentBundle = QFileInfo(currentContents).path();      // .../ProjectPlusFR.app
-            QString parentDir = QFileInfo(currentBundle).path();            // .../Documents/testmac/
+           QString parentDir = QFileInfo(tmpDir).path(); // .../Documents/testmac
+QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
-            qDebug().noquote() << "📁 App current bundle:" << currentBundle;
-            qDebug().noquote() << "📁 Parent dir:" << parentDir;
+qDebug().noquote() << "📁 Corrected parent dir:" << parentDir;
+qDebug().noquote() << "📁 Current bundle:" << currentBundle;
 
-            // Étape 7 : Script bash pour remplacement complet
-            QString script = QStringLiteral(R"(
+      // Étape 7 : Script bash pour remplacement complet (attend que Dolphin soit bien fermé)
+QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
-sleep 2
+SRC="%2"
+DST="%1"
+
+echo "🔍 Checking paths:"
+echo "   SRC=$SRC"
+echo "   DST=$DST"
+
+sleep 2  # attendre que Dolphin se ferme
+
+if [ ! -d "$SRC" ]; then
+  echo "❌ Source app not found!"
+  exit 1
+fi
+
 echo "🧹 Removing old app..."
-rm -rf "%1"
+rm -rf "$DST"
+
 echo "🚚 Moving new app..."
-mv -f "%2" "%1"
-echo "✅ Relaunching app..."
-open "%1"
+mv "$SRC" "$DST"
+
+if [ ! -d "$DST" ]; then
+  echo "❌ Move failed!"
+  exit 1
+fi
+
+echo "✅ Relaunching..."
+open "$DST"
 )").arg(currentBundle, finalAppPath);
 
-            // Étape 8 : Exécution et relance
-            qDebug().noquote() << "🚀 Running macOS replacement script...";
-            bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-            if (started)
-            {
-                qDebug().noquote() << "✅ Relaunch script started, exiting...";
-                QTimer::singleShot(100, [] { ::_exit(0); });
-            }
-            else
-            {
-                qWarning().noquote() << "❌ Failed to start relaunch script";
-                QCoreApplication::quit();
-            }
-        }, Qt::QueuedConnection);
+
+           // Étape 8 : Fermeture de Dolphin + lancement du script
+qDebug().noquote() << "🚀 Running macOS replacement script...";
+this->close();
+QApplication::processEvents();
+
+bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+if (started)
+{
+    qDebug().noquote() << "✅ Relaunch script started, exiting app...";
+    QTimer::singleShot(300, [] { ::_exit(0); });  // délai pour libérer les fichiers
+}
+else
+{
+    qWarning().noquote() << "❌ Failed to start relaunch script";
+    QCoreApplication::quit();
+}
 #endif
-
-
-   
-
-    if (!QFile::exists(zipFile))
-    {
-        QMessageBox::critical(this, QStringLiteral("Error"), QStringLiteral("ZIP file missing!"));
-        reject();
-        return;
-    }
-
-    QDir().mkpath(tmpDir);
-
-    label->setText(QStringLiteral("Step 2/2: Installing update..."));
-    stepLabel->setText(QStringLiteral("Extracting files..."));
-    stepProgressBar->setValue(0);
-    progressBar->setValue(75);
-
-    // --- Thread d’extraction ---
-    QThread* thread = new QThread(nullptr);
-
-    connect(thread, &QThread::started, this, [this, zipFile, tmpDir, thread]() {
-        bool success = unzipFile(zipFile.toStdString(), tmpDir.toStdString(),
-            [this](int current, int total)
-            {
-                const int percent = (total > 0) ? (current * 100 / total) : 0;
-
-                QMetaObject::invokeMethod(QApplication::instance(), [=]() {
-                    stepProgressBar->setValue(percent);
-                    stepLabel->setText(QStringLiteral("Extracting: %1%").arg(percent));
-                    progressBar->setValue(75 + (percent * 0.25));
-                }, Qt::QueuedConnection);
-            });
-
-        QMetaObject::invokeMethod(QApplication::instance(), [=]() {
-            thread->quit();
-            thread->deleteLater();
-
-            if (!success)
-            {
-                QMessageBox::critical(nullptr, QStringLiteral("Error"), QStringLiteral("Failed to extract ZIP file."));
-                return;
-            }
-
-            QFile::remove(zipFile);
-            qDebug().noquote() << QStringLiteral("✅ ZIP extracted to temporary folder:") << tmpDir;
-
-            stepLabel->setText(QStringLiteral("Finalizing update..."));
-            stepProgressBar->setValue(100);
-            progressBar->setValue(100);
 
 #ifdef _WIN32
             const QString exe = QDir::toNativeSeparators(
