@@ -876,7 +876,8 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
     QString output = QString::fromUtf8(curl->readAllStandardError());
 
     // Exemple de ligne : " 34.7%  12.3M  3.21MB/s  eta 00:01:12"
-    static QRegularExpression progressRegex(R"((\d{1,3}(?:\.\d+)?)%\s+[\d\.]+\w?\s+([\d\.]+)([kM]?)/s\s+eta\s+([\d:]+))");
+    static QRegularExpression progressRegex(
+    QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%\s+[\d\.]+\w?\s+([\d\.]+)([kM]?)/s\s+eta\s+([\d:]+))"));
 
     QRegularExpressionMatch match = progressRegex.match(output);
     if (match.hasMatch())
