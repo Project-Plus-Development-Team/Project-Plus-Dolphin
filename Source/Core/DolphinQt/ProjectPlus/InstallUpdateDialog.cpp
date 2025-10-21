@@ -1104,19 +1104,23 @@ QMetaObject::invokeMethod(QApplication::instance(), [=]() {
     QString parentDir = QFileInfo(tmpDir).path();
     QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
-   QString script = QStringLiteral(R"(
-#!/bin/bash
-set -e
-SRC="%2"
-DST="%1"
-sleep 2
-echo "🧹 Cleaning old app..."
-rm -rf "$DST"
-echo "🚚 Moving full update content..."
-mv "$SRC"/* "$(dirname "$DST")"/
-echo "✅ Relaunching app..."
-open "$DST"
-)").arg(currentBundle, tmpDir);
+ QString script;
+script += "#!/bin/bash\n";
+script += "set -e\n";
+script += QString("SRC=\"%1\"\n").arg(tmpDir);
+script += QString("DST=\"%1\"\n").arg(currentBundle);
+script += "sleep 2\n";
+script += "echo \"🧹 Cleaning old app...\"\n";
+script += "rm -rf \"$DST\"\n";
+script += "echo \"🚚 Moving full update content...\"\n";
+script += "DIR=\"${DST%/*}\"\n";
+script += "shopt -s dotglob nullglob\n";
+script += "mv \"$SRC\"/* \"$DIR\"/\n";
+script += "echo \"🧽 Cleaning temporary files...\"\n";
+script += "rmdir \"$SRC\" 2>/dev/null || true\n";
+script += "echo \"✅ Relaunching app...\"\n";
+script += "open \"$DST\"\n";
+
 
     this->close();
     QApplication::processEvents();
