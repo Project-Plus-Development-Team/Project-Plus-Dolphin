@@ -216,8 +216,27 @@ void InstallUpdateDialog::checkIfAllDownloadsFinished(bool sdFinished, bool sdSu
         progressBar->setValue(50);  // ✅ 50 % après la SD
 
         QThread* thread = new QThread;
-        auto* worker = new DownloadWorker(downloadUrl,
-                                          temporaryDirectory + QDir::separator() + filename);
+
+       #ifdef __APPLE__
+
+    // 📦 Corrige la destination du téléchargement sur macOS
+    QString appDir = QCoreApplication::applicationDirPath();     // .../Contents/MacOS
+    QString contentsDir = QFileInfo(appDir).path();              // .../Contents
+    QString appBundleDir = QFileInfo(contentsDir).path();        // .../ProjectPlusFR.app
+    QString parentDir = QFileInfo(appBundleDir).path();          // dossier parent du .app
+
+    QString realTmpDir = QDir(parentDir).filePath(QStringLiteral("update_tmp"));
+    QDir().mkpath(realTmpDir); // s'assurer que le dossier existe
+
+    QString zipPath = QDir(realTmpDir).filePath(filename);
+#else
+    QString zipPath = QDir(temporaryDirectory).filePath(filename);
+#endif
+
+qDebug().noquote() << "🚀 curl (or worker) will download ZIP to:" << zipPath;
+
+auto* worker = new DownloadWorker(downloadUrl, zipPath);
+
         worker->moveToThread(thread);
 
         connect(thread, &QThread::started, worker, &DownloadWorker::startDownload); 
@@ -232,10 +251,17 @@ if (!zipAnimTimer)
     zipAnimTimer = new QTimer(this);
     zipAnimTimer->setInterval(30); // ~33 FPS
     connect(zipAnimTimer, &QTimer::timeout, this, [this]() {
-        // interpolation lissée vers la cible
-        zipDisplayed += (zipTarget - zipDisplayed) * 0.15;  // 0.10 = plus doux, 0.25 = plus réactif
-        progressBar->setValue(static_cast<int>(zipDisplayed));
-    });
+    // Empêche tout retour en arrière brutal
+    if (zipTarget < zipDisplayed)
+        zipTarget = zipDisplayed;
+
+    // Lissage fluide vers la cible
+    zipDisplayed += (zipTarget - zipDisplayed) * 0.15;
+
+    // Clamp et mise à jour UI
+    int value = qBound(0, static_cast<int>(zipDisplayed), 100);
+    progressBar->setValue(value);
+});
     zipAnimTimer->start();
 }
 
