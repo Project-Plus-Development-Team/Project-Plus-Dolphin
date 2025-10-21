@@ -1246,10 +1246,10 @@ else
 #else
             // 🧠 macOS/Linux : remplacement fiable + relance automatique
             QString appBundleName = QStringLiteral("ProjectPlusFR.app");
-            QString newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
+            newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
             QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
 
-            QString script = QStringLiteral(R"(
+            script = QStringLiteral(R"(
 #!/bin/bash
 sleep 1
 echo "🧹 Cleaning up..."
@@ -1260,24 +1260,6 @@ echo "✅ Relaunching app..."
 open "%1"
 )").arg(destAppPath, tmpDir, appBundleName);
 
-#ifdef __APPLE__
-            qDebug().noquote() << "🚀 Running macOS update script after quit";
-            bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-            if (started)
-            {
-                qDebug().noquote() << "✅ Relaunch script started, exiting immediately";
-                QTimer::singleShot(100, [] {
-                    ::_exit(0);
-                });
-            }
-            else
-            {
-                qWarning().noquote() << "❌ Failed to start relaunch script";
-                QCoreApplication::quit();
-            }
-#else
-            QCoreApplication::quit();
-#endif
 #endif
         }, Qt::QueuedConnection);
     });
