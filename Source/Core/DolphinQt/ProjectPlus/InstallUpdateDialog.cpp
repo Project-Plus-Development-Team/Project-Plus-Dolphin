@@ -1078,131 +1078,114 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             stepProgressBar->setValue(100);
             progressBar->setValue(100);
 
-        #ifdef __APPLE__
-        // --------------------------------------------------------------
-        // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
-        // --------------------------------------------------------------
-        QMetaObject::invokeMethod(QApplication::instance(), [=]() {
-            // Étape 1 : Trouver le .tar extrait
-            QDir tmp(tmpDir);
-            QStringList tars = tmp.entryList(QStringList() << QStringLiteral("*.tar"), QDir::Files);
-            if (tars.isEmpty())
-            {
-                qWarning().noquote() << "⚠️ Aucun fichier .tar trouvé après extraction ZIP";
-            }
-            else
-            {
-                QString tarPath = tmp.filePath(tars.first());
-                qDebug().noquote() << "📦 Found TAR:" << tarPath;
+       #ifdef __APPLE__
+// --------------------------------------------------------------
+// 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
+// --------------------------------------------------------------
+QMetaObject::invokeMethod(QApplication::instance(), [=]() {
+    // Étape 1 : Trouver le .tar extrait
+    QDir tmp(tmpDir);
+    QStringList tars = tmp.entryList(QStringList() << QStringLiteral("*.tar"), QDir::Files);
+    if (!tars.isEmpty())
+    {
+        QString tarPath = tmp.filePath(tars.first());
+        qDebug().noquote() << "📦 Found TAR:" << tarPath;
 
-                // Étape 2 : Extraire le .tar → dans update_tmp
-                QProcess tarProc;
-                tarProc.setWorkingDirectory(tmpDir);
-                tarProc.start(QStringLiteral("/usr/bin/tar"), {QStringLiteral("-xf"), tarPath});
-                if (!tarProc.waitForFinished(60000))
-                {
-                    qWarning().noquote() << "❌ TAR extraction timeout!";
-                }
-                else
-                {
-                    qDebug().noquote() << "✅ TAR extracted successfully.";
-                }
+        QProcess tarProc;
+        tarProc.setWorkingDirectory(tmpDir);
+        tarProc.start(QStringLiteral("/usr/bin/tar"), {QStringLiteral("-xf"), tarPath});
+        tarProc.waitForFinished(60000);
+        QFile::remove(tarPath);
+        qDebug().noquote() << "✅ TAR extracted and removed.";
+    }
 
-                // Étape 3 : Supprimer le .tar
-                QFile::remove(tarPath);
-                qDebug().noquote() << "🧹 Removed TAR:" << tarPath;
-            }
+    // Étape 2 : Chercher le .app
+    QString newAppPath;
+    QStringList apps;
+    QDirIterator it(tmpDir, QStringList() << QStringLiteral("*.app"), QDir::Dirs, QDirIterator::Subdirectories);
+    while (it.hasNext())
+        apps << it.next();
 
-            // Étape 4 : Chercher le nouveau .app dans update_tmp (même dans sous-dossiers)
-            QString newAppPath;
-            QStringList apps;
-            QDirIterator it(tmpDir, QStringList() << QStringLiteral("*.app"), QDir::Dirs, QDirIterator::Subdirectories);
-            while (it.hasNext())
-                apps << it.next();
+    if (apps.isEmpty())
+    {
+        qWarning().noquote() << "❌ Aucun .app trouvé après extraction TAR";
+        return;
+    }
 
-            if (apps.isEmpty())
-            {
-                qWarning().noquote() << "❌ Aucun .app trouvé après extraction TAR";
-                return;
-            }
+    newAppPath = apps.first();
+    QString finalAppPath = QDir(tmpDir).filePath(QStringLiteral("ProjectPlusFR.app"));
+    if (QFileInfo(newAppPath).fileName() != QStringLiteral("ProjectPlusFR.app"))
+        QDir().rename(newAppPath, finalAppPath);
 
-            newAppPath = apps.first();
-            qDebug().noquote() << "📦 Found new app bundle:" << newAppPath;
+    QString parentDir = QFileInfo(tmpDir).path();
+    QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
-            // Étape 5 : Renommer si nécessaire
-            QString finalAppPath = QDir(tmpDir).filePath(QStringLiteral("ProjectPlusFR.app"));
-            if (QFileInfo(newAppPath).fileName() != QStringLiteral("ProjectPlusFR.app"))
-            {
-                QDir().rename(newAppPath, finalAppPath);
-                qDebug().noquote() << "✏️ Renamed to:" << finalAppPath;
-            }
-            else
-            {
-                finalAppPath = newAppPath;
-            }
-
-            // Étape 6 : Dossier cible de l’application actuelle
-            QString parentDir = QFileInfo(tmpDir).path(); // .../Documents/testmac
-            QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
-
-            qDebug().noquote() << "📁 Corrected parent dir:" << parentDir;
-            qDebug().noquote() << "📁 Current bundle:" << currentBundle;
-
-            // Étape 7 : Script bash pour remplacement complet (attend que Dolphin soit bien fermé)
-            QString script = QStringLiteral(R"(
+    QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
 SRC="%2"
 DST="%1"
-
-echo "🔍 Checking paths:"
-echo "   SRC=$SRC"
-echo "   DST=$DST"
-
-sleep 2  # attendre que Dolphin se ferme
-
-if [ ! -d "$SRC" ]; then
-  echo "❌ Source app not found!"
-  exit 1
-fi
-
-echo "🧹 Removing old app..."
+sleep 2
 rm -rf "$DST"
-
-echo "🚚 Moving new app..."
 mv "$SRC" "$DST"
-
-if [ ! -d "$DST" ]; then
-  echo "❌ Move failed!"
-  exit 1
-fi
-
-echo "✅ Relaunching..."
 open "$DST"
 )").arg(currentBundle, finalAppPath);
 
-            // Étape 8 : Fermeture de Dolphin + lancement du script
-            qDebug().noquote() << "🚀 Running macOS replacement script...";
-            this->close();
-            QApplication::processEvents();
+    this->close();
+    QApplication::processEvents();
+    bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+    if (started)
+        QTimer::singleShot(300, [] { ::_exit(0); });
+    else
+        QCoreApplication::quit();
 
-            bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-            if (started)
-            {
-                qDebug().noquote() << "✅ Relaunch script started, exiting app...";
-                QTimer::singleShot(300, [] { ::_exit(0); });  // délai pour libérer les fichiers
-            }
-            else
-            {
-                qWarning().noquote() << "❌ Failed to start relaunch script";
-                QCoreApplication::quit();
-            }
-        }, Qt::QueuedConnection);
+}, Qt::QueuedConnection);
+
+#else
+// --------------------------------------------------------------
+// 🪟 Windows / 🐧 Linux
+// --------------------------------------------------------------
+#ifdef _WIN32
+    const QString exe = QDir::toNativeSeparators(
+        installationDirectory + QDir::separator() + QStringLiteral("Dolphin.exe"));
+#else
+    const QString exe = QDir::toNativeSeparators(
+        installationDirectory + QDir::separator() + QStringLiteral("Dolphin"));
+#endif
+
+    if (!QFile::exists(exe))
+    {
+        QMessageBox::information(nullptr, QStringLiteral("Done"),
+                                 QStringLiteral("Installation finished. Launch manually."));
+        return;
+    }
+
+    this->accept();
+
+#ifdef _WIN32
+    QString psScript = QStringLiteral(R"(
+$tmp = "%1";
+$dest = "%2";
+Start-Sleep -Seconds 1;
+robocopy $tmp $dest /E /MOVE /R:3 /W:1 | Out-Null;
+Start-Process "$dest\Dolphin.exe";
+)").arg(QDir::toNativeSeparators(tmpDir),
+        QDir::toNativeSeparators(installationDirectory));
+
+    QProcess::startDetached(QStringLiteral("powershell.exe"),
+        {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
+         QStringLiteral("Bypass"), QStringLiteral("-Command"), psScript});
+#else
+    QProcess::startDetached(exe, {});
+    QCoreApplication::quit();
+#endif // _WIN32
 #endif // __APPLE__
 
+        }, Qt::QueuedConnection);
     });
     thread->start();
 }
+
 
 
 #ifdef _WIN32
