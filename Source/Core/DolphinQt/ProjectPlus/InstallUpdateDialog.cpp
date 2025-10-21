@@ -1079,6 +1079,7 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             progressBar->setValue(100);
 
 #ifdef __APPLE__
+        #ifdef __APPLE__
         // --------------------------------------------------------------
         // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
         // --------------------------------------------------------------
@@ -1142,14 +1143,14 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             }
 
             // Étape 6 : Dossier cible de l’application actuelle
-           QString parentDir = QFileInfo(tmpDir).path(); // .../Documents/testmac
-QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
+            QString parentDir = QFileInfo(tmpDir).path(); // .../Documents/testmac
+            QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
-qDebug().noquote() << "📁 Corrected parent dir:" << parentDir;
-qDebug().noquote() << "📁 Current bundle:" << currentBundle;
+            qDebug().noquote() << "📁 Corrected parent dir:" << parentDir;
+            qDebug().noquote() << "📁 Current bundle:" << currentBundle;
 
-      // Étape 7 : Script bash pour remplacement complet (attend que Dolphin soit bien fermé)
-QString script = QStringLiteral(R"(
+            // Étape 7 : Script bash pour remplacement complet (attend que Dolphin soit bien fermé)
+            QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
 SRC="%2"
@@ -1181,24 +1182,29 @@ echo "✅ Relaunching..."
 open "$DST"
 )").arg(currentBundle, finalAppPath);
 
+            // Étape 8 : Fermeture de Dolphin + lancement du script
+            qDebug().noquote() << "🚀 Running macOS replacement script...";
+            this->close();
+            QApplication::processEvents();
 
-           // Étape 8 : Fermeture de Dolphin + lancement du script
-qDebug().noquote() << "🚀 Running macOS replacement script...";
-this->close();
-QApplication::processEvents();
+            bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+            if (started)
+            {
+                qDebug().noquote() << "✅ Relaunch script started, exiting app...";
+                QTimer::singleShot(300, [] { ::_exit(0); });  // délai pour libérer les fichiers
+            }
+            else
+            {
+                qWarning().noquote() << "❌ Failed to start relaunch script";
+                QCoreApplication::quit();
+            }
+        }, Qt::QueuedConnection);
+#endif // __APPLE__
 
-bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
-if (started)
-{
-    qDebug().noquote() << "✅ Relaunch script started, exiting app...";
-    QTimer::singleShot(300, [] { ::_exit(0); });  // délai pour libérer les fichiers
+    });
+    thread->start();
 }
-else
-{
-    qWarning().noquote() << "❌ Failed to start relaunch script";
-    QCoreApplication::quit();
-}
-#endif
+
 
 #ifdef _WIN32
             const QString exe = QDir::toNativeSeparators(
