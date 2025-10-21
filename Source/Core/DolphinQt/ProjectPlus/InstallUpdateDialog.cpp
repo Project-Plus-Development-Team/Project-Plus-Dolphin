@@ -1104,22 +1104,22 @@ QMetaObject::invokeMethod(QApplication::instance(), [=]() {
     QString parentDir = QFileInfo(tmpDir).path();
     QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
- QString script;
-script += "#!/bin/bash\n";
-script += "set -e\n";
-script += QString("SRC=\"%1\"\n").arg(tmpDir);
-script += QString("DST=\"%1\"\n").arg(currentBundle);
-script += "sleep 2\n";
-script += "echo \"🧹 Cleaning old app...\"\n";
-script += "rm -rf \"$DST\"\n";
-script += "echo \"🚚 Moving full update content...\"\n";
-script += "DIR=\"${DST%/*}\"\n";
-script += "shopt -s dotglob nullglob\n";
-script += "mv \"$SRC\"/* \"$DIR\"/\n";
-script += "echo \"🧽 Cleaning temporary files...\"\n";
-script += "rmdir \"$SRC\" 2>/dev/null || true\n";
-script += "echo \"✅ Relaunching app...\"\n";
-script += "open \"$DST\"\n";
+QString script;
+script += QStringLiteral("#!/bin/bash\n");
+script += QStringLiteral("set -e\n");
+script += QStringLiteral("SRC=\"%1\"\n").arg(tmpDir);
+script += QStringLiteral("DST=\"%1\"\n").arg(currentBundle);
+script += QStringLiteral("sleep 2\n");
+script += QStringLiteral("echo \"🧹 Cleaning old app...\"\n");
+script += QStringLiteral("rm -rf \"$DST\"\n");
+script += QStringLiteral("echo \"🚚 Moving full update content...\"\n");
+script += QStringLiteral("DIR=\"${DST%/*}\"\n");
+script += QStringLiteral("shopt -s dotglob nullglob\n");
+script += QStringLiteral("mv \"$SRC\"/* \"$DIR\"/\n");
+script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
+script += QStringLiteral("rmdir \"$SRC\" 2>/dev/null || true\n");
+script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
+script += QStringLiteral("open \"$DST\"\n");
 
 
     this->close();
