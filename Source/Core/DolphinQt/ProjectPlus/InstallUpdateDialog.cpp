@@ -12,6 +12,7 @@
 #include <unistd.h>
 #endif
 
+#include <QDirIterator>
 #include <QCoreApplication>
 #include <QProcess>
 #include <QDir>
@@ -885,7 +886,7 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
         QString unit = match.captured(3);
         QString eta = match.captured(4);
 
-        if (unit == "k") speed /= 1024.0;
+        if (unit == QStringLiteral("k")) speed /= 1024.0;
 
         stepProgressBar->setValue(percent);
         progressBar->setValue(percent / 1.0);
@@ -986,7 +987,7 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
         QMetaObject::invokeMethod(QApplication::instance(), [=]() {
             // Étape 1 : Trouver le .tar extrait
             QDir tmp(tmpDir);
-            QStringList tars = tmp.entryList(QStringList() << "*.tar", QDir::Files);
+            QStringList tars = tmp.entryList(QStringList() << QStringLiteral("*.tar"), QDir::Files);
             if (tars.isEmpty())
             {
                 qWarning().noquote() << "⚠️ Aucun fichier .tar trouvé après extraction ZIP";
@@ -1017,7 +1018,7 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             // Étape 4 : Chercher le nouveau .app dans update_tmp (même dans sous-dossiers)
             QString newAppPath;
             QStringList apps;
-            QDirIterator it(tmpDir, QStringList() << "*.app", QDir::Dirs, QDirIterator::Subdirectories);
+            QDirIterator it(tmpDir, QStringList() << QStringLiteral("*.app"), QDir::Dirs, QDirIterator::Subdirectories);
             while (it.hasNext())
                 apps << it.next();
 
@@ -1031,8 +1032,8 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             qDebug().noquote() << "📦 Found new app bundle:" << newAppPath;
 
             // Étape 5 : Renommer si nécessaire
-            QString finalAppPath = QDir(tmpDir).filePath("ProjectPlusFR.app");
-            if (QFileInfo(newAppPath).fileName() != "ProjectPlusFR.app")
+            QString finalAppPath = QDir(tmpDir).filePath(QStringLiteral("ProjectPlusFR.app"));
+            if (QFileInfo(newAppPath).fileName() != QStringLiteral("ProjectPlusFR.app"))
             {
                 QDir().rename(newAppPath, finalAppPath);
                 qDebug().noquote() << "✏️ Renamed to:" << finalAppPath;
