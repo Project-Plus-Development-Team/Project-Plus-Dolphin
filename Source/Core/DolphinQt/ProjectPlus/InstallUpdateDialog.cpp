@@ -878,7 +878,7 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
     for (const QByteArray& line : lines)
     {
         QString text = QString::fromUtf8(line).trimmed();
-        if (text.isEmpty() || !text.contains('%'))
+        if (text.isEmpty() || !text.contains(QLatin1Char('%')))
             continue;
 
         QRegularExpression re(QStringLiteral(R"((\d{1,3})%)"));
@@ -886,7 +886,7 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
         if (match.hasMatch())
         {
             int percent = match.captured(1).toInt();
-            uiProgress->setValue(percent);
+            uiProgress(percent, QStringLiteral("Downloading..."));
         }
     }
 });
