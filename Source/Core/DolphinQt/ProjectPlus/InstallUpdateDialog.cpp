@@ -1085,13 +1085,13 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
 // --------------------------------------------------------------
 QMetaObject::invokeMethod(QApplication::instance(), [=]() {
     QDir tmp(tmpDir);
-    QStringList tars = tmp.entryList(QStringList() << "*.tar", QDir::Files);
+    QStringList tars = tmp.entryList(QStringList() << QStringLiteral("*.tar"), QDir::Files);
     if (!tars.isEmpty()) {
         QString tarPath = tmp.filePath(tars.first());
         qDebug().noquote() << "📦 Found TAR:" << tarPath;
         QProcess tarProc;
         tarProc.setWorkingDirectory(tmpDir);
-        tarProc.start("/usr/bin/tar", {"-xf", tarPath});
+        tarProc.start(QStringLiteral("/usr/bin/tar"), {QStringLiteral("-xf"), tarPath});
         tarProc.waitForFinished(60000);
         QFile::remove(tarPath);
         qDebug().noquote() << "✅ TAR extracted and removed.";
@@ -1099,7 +1099,7 @@ QMetaObject::invokeMethod(QApplication::instance(), [=]() {
 
     QString newAppPath;
     QStringList apps;
-    QDirIterator it(tmpDir, QStringList() << "*.app", QDir::Dirs, QDirIterator::Subdirectories);
+    QDirIterator it(tmpDir, QStringList() << QStringLiteral("*.app"), QDir::Dirs, QDirIterator::Subdirectories);
     while (it.hasNext())
         apps << it.next();
 
@@ -1109,13 +1109,13 @@ QMetaObject::invokeMethod(QApplication::instance(), [=]() {
     }
 
     newAppPath = apps.first();
-    QString finalAppPath = QDir(tmpDir).filePath("ProjectPlusFR.app");
-    if (QFileInfo(newAppPath).fileName() != "ProjectPlusFR.app") {
+    QString finalAppPath = QDir(tmpDir).filePath(QStringLiteral("ProjectPlusFR.app"));
+    if (QFileInfo(newAppPath).fileName() != QStringLiteral("ProjectPlusFR.app")) {
         QDir().rename(newAppPath, finalAppPath);
     }
 
     QString parentDir = QFileInfo(tmpDir).path();
-    QString currentBundle = QDir(parentDir).filePath("ProjectPlusFR.app");
+    QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
     QString script = QStringLiteral(R"(
 #!/bin/bash
@@ -1130,7 +1130,8 @@ open "$DST"
 
     this->close();
     QApplication::processEvents();
-    bool started = QProcess::startDetached("/bin/bash", {"-c", script});
+    bool started = QProcess::startDetached(QStringLiteral("/bin/bash"),
+                                           {QStringLiteral("-c"), script});
     if (started)
         QTimer::singleShot(300, [] { ::_exit(0); });
     else
@@ -1138,75 +1139,50 @@ open "$DST"
 
 }, Qt::QueuedConnection);
 
+#else
+// --------------------------------------------------------------
+// 🪟 Windows / 🐧 Linux
+// --------------------------------------------------------------
+#ifdef _WIN32
+    const QString exe = QDir::toNativeSeparators(
+        installationDirectory + QDir::separator() + QStringLiteral("Dolphin.exe"));
+#else
+    const QString exe = QDir::toNativeSeparators(
+        installationDirectory + QDir::separator() + QStringLiteral("Dolphin"));
+#endif
+
+    if (!QFile::exists(exe)) {
+        QMessageBox::information(nullptr, QStringLiteral("Done"),
+                                 QStringLiteral("Installation finished. Launch manually."));
+        return;
+    }
+
+    this->accept();
+
+#ifdef _WIN32
+    QString psScript = QStringLiteral(R"(
+$tmp = "%1";
+$dest = "%2";
+Start-Sleep -Seconds 1;
+robocopy $tmp $dest /E /MOVE /R:3 /W:1 | Out-Null;
+Start-Process "$dest\Dolphin.exe";
+)").arg(QDir::toNativeSeparators(tmpDir),
+        QDir::toNativeSeparators(installationDirectory));
+
+    QProcess::startDetached(QStringLiteral("powershell.exe"),
+        {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
+         QStringLiteral("Bypass"), QStringLiteral("-Command"), psScript});
+#else
+    QProcess::startDetached(exe, {});
+    QCoreApplication::quit();
+#endif // _WIN32
 #endif // __APPLE__
 
-
-
-#ifdef _WIN32
-            const QString exe = QDir::toNativeSeparators(
-                installationDirectory + QDir::separator() + QStringLiteral("Dolphin.exe"));
-#else
-            const QString exe = QDir::toNativeSeparators(
-                installationDirectory + QDir::separator() + QStringLiteral("Dolphin"));
-#endif
-
-            if (!QFile::exists(exe))
-            {
-                QMessageBox::information(nullptr, QStringLiteral("Done"),
-                                         QStringLiteral("Installation finished. Launch manually."));
-                return;
-            }
-
-            qDebug().noquote() << QStringLiteral("♻️ Preparing for restart...");
-
-            this->accept();
-
-#ifdef _WIN32
-            QString psScript = QStringLiteral(R"(
-    $tmp = "%1";
-    $dest = "%2";
-
-    Start-Sleep -Seconds 1;
-
-    Get-Process "Dolphin" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue;
-    Start-Sleep -Seconds 1;
-
-    Write-Host "🚚 Moving update files from $tmp to $dest...";
-    robocopy $tmp $dest /E /MOVE /R:3 /W:1 | Out-Null;
-
-    if (Test-Path $tmp) { Remove-Item -Path $tmp -Recurse -Force -ErrorAction SilentlyContinue }
-
-    Write-Host "✅ Update applied. Restarting Dolphin...";
-    Start-Process "$dest\\Dolphin.exe";
-)").arg(QDir::toNativeSeparators(tmpDir),
-         QDir::toNativeSeparators(installationDirectory));
-
-            qDebug().noquote() << QStringLiteral("🚀 Launching PowerShell update finalizer...");
-            QProcess::startDetached(QStringLiteral("powershell.exe"),
-                {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
-                 QStringLiteral("Bypass"), QStringLiteral("-Command"), psScript});
-#else
-            // 🧠 macOS/Linux : remplacement fiable + relance automatique
-            QString appBundleName = QStringLiteral("ProjectPlusFR.app");
-            newAppPath = QStringLiteral("%1/%2").arg(tmpDir, appBundleName);
-            QString destAppPath = QStringLiteral("%1/%2").arg(installationDirectory, appBundleName);
-
-            script = QStringLiteral(R"(
-#!/bin/bash
-sleep 1
-echo "🧹 Cleaning up..."
-rm -rf "%2/update_tmp"
-echo "🚀 Moving new app..."
-mv -f "%2/%3" "%1"
-echo "✅ Relaunching app..."
-open "%1"
-)").arg(destAppPath, tmpDir, appBundleName);
-
-#endif
         }, Qt::QueuedConnection);
     });
     thread->start();
 }
+
 
 
 
