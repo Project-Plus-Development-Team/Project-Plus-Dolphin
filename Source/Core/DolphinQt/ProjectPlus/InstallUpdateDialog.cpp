@@ -846,7 +846,7 @@ void InstallUpdateDialog::startHttpFallback(const QString& sdUrl,
     // macOS/Linux fallback (curl)
    // 🐧 macOS/Linux fallback (curl avec vitesse + progression fluide)
 QProcess* curl = new QProcess(this);
-curl->setProcessChannelMode(QProcess::MergedChannels);
+curl->setProcessChannelMode(QProcess::SeparateChannels);
 curl->setReadChannel(QProcess::StandardError);
 
 
@@ -870,31 +870,24 @@ if (!curlTimer)
 
 
 
-// ⚠️ curl imprime la barre sur STDERR, pas STDOUT.
-// Progression curl: lire STDERR
+// --- Suivi de progression stable ---
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
-    QString output = QString::fromUtf8(curl->readAllStandardError());
+    QByteArray output = curl->readAllStandardError();
+    QList<QByteArray> lines = output.split('\r');
 
-    // Exemple de ligne : " 34.7%  12.3M  3.21MB/s  eta 00:01:12"
-    static QRegularExpression progressRegex(
-    QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%\s+[\d\.]+\w?\s+([\d\.]+)([kM]?)/s\s+eta\s+([\d:]+))"));
-
-    QRegularExpressionMatch match = progressRegex.match(output);
-    if (match.hasMatch())
+    for (const QByteArray& line : lines)
     {
-        int percent = static_cast<int>(match.captured(1).toDouble());
-        double speed = match.captured(2).toDouble();
-        QString unit = match.captured(3);
-        QString eta = match.captured(4);
+        QString text = QString::fromUtf8(line).trimmed();
+        if (text.isEmpty() || !text.contains('%'))
+            continue;
 
-        if (unit == QStringLiteral("k")) speed /= 1024.0;
-
-        stepProgressBar->setValue(percent);
-        progressBar->setValue(percent / 1.0);
-        stepLabel->setText(QStringLiteral("Downloading... %1% (%2 MB/s, ETA %3)")
-                           .arg(percent)
-                           .arg(speed, 0, 'f', 2)
-                           .arg(eta));
+        QRegularExpression re(QStringLiteral(R"((\d{1,3})%)"));
+        QRegularExpressionMatch match = re.match(text);
+        if (match.hasMatch())
+        {
+            int percent = match.captured(1).toInt();
+            uiProgress->setValue(percent);
+        }
     }
 });
 
@@ -954,6 +947,7 @@ void InstallUpdateDialog::timerEvent(QTimerEvent *e)
 
 // --------------------- INSTALL (simplifié pour l'instant) ----------------------
 void InstallUpdateDialog::install()
+
 {
     qDebug().noquote() << QStringLiteral("🧩 Starting installation...");
 
@@ -974,11 +968,16 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
     if (QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
     {
         QString baseDir = dir.absolutePath();
-        tmpDir = QDir(baseDir).filePath(QStringLiteral("Contents/MacOS/update_tmp"));
+        tmpDir = QDir(baseDir).filePath(QStringLiteral("update_tmp"));
         QDir().mkpath(tmpDir);
         qDebug().noquote() << "✅ Using corrected update_tmp path:" << tmpDir;
     }
 }
+
+ QString zipFile = QDir(tmpDir).filePath(filename);
+
+  if (!QFile::exists(zipFile))
+        qDebug().noquote() << "ℹ️ ZIP not yet downloaded, waiting for completion...";
 
 
 #ifdef __APPLE__
@@ -1083,7 +1082,7 @@ open "%1"
 #endif
 
 
-    const QString zipFile = tmpDir + QDir::separator() + filename;
+   
 
     if (!QFile::exists(zipFile))
     {
@@ -1091,21 +1090,6 @@ open "%1"
         reject();
         return;
     }
-
-    #ifdef __APPLE__
-    // 💡 Déplace le .zip depuis le dossier temporaire initial vers le bon update_tmp
-    QString oldZipPath = temporaryDirectory + QDir::separator() + filename;
-    QString newZipPath = tmpDir + QDir::separator() + filename;
-
-    if (QFile::exists(oldZipPath))
-    {
-        QFile::remove(newZipPath); // au cas où un ancien existe
-        if (QFile::rename(oldZipPath, newZipPath))
-            qDebug().noquote() << "📦 Moved ZIP to correct update_tmp:" << newZipPath;
-        else
-            qWarning().noquote() << "⚠️ Failed to move ZIP to update_tmp!";
-    }
-#endif
 
     QDir().mkpath(tmpDir);
 
