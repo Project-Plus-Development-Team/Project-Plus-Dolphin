@@ -1078,7 +1078,7 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             stepProgressBar->setValue(100);
             progressBar->setValue(100);
 
-       #ifdef __APPLE__
+
 #ifdef __APPLE__
 // --------------------------------------------------------------
 // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
@@ -1138,48 +1138,7 @@ open "$DST"
 
 }, Qt::QueuedConnection);
 
-#else
-// --------------------------------------------------------------
-// 🪟 Windows / 🐧 Linux
-// --------------------------------------------------------------
-#ifdef _WIN32
-    const QString exe = QDir::toNativeSeparators(
-        installationDirectory + QDir::separator() + "Dolphin.exe");
-#else
-    const QString exe = QDir::toNativeSeparators(
-        installationDirectory + QDir::separator() + "Dolphin");
-#endif
-
-    if (!QFile::exists(exe)) {
-        QMessageBox::information(nullptr, "Done", "Installation finished. Launch manually.");
-        return;
-    }
-
-    this->accept();
-
-#ifdef _WIN32
-    QString psScript = QStringLiteral(R"(
-$tmp = "%1";
-$dest = "%2";
-Start-Sleep -Seconds 1;
-robocopy $tmp $dest /E /MOVE /R:3 /W:1 | Out-Null;
-Start-Process "$dest\Dolphin.exe";
-)").arg(QDir::toNativeSeparators(tmpDir),
-        QDir::toNativeSeparators(installationDirectory));
-
-    QProcess::startDetached("powershell.exe",
-        {"-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript});
-#else
-    QProcess::startDetached(exe, {});
-    QCoreApplication::quit();
-#endif // _WIN32
 #endif // __APPLE__
-
-        }, Qt::QueuedConnection);
-    });
-    thread->start();
-}
-
 
 
 
