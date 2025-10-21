@@ -560,8 +560,12 @@ const QString sdPath = QDir::toNativeSeparators(baseDir + QStringLiteral("/User/
             const int clamped = qBound(0, p, 100);
             stepProgressBar->setValue(clamped);
             stepLabel->setText(t);
-            progressBar->setValue(clamped / 2); // 0..50%
-        };
+           static int lastMain = -1;
+if (clamped / 5 != lastMain / 5) {
+    progressBar->setValue(clamped / 2);
+    lastMain = clamped;
+}
+ };
 
         auto uiDone = [this](bool ok, const QString& t)
         {
