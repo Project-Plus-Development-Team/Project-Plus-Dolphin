@@ -1079,46 +1079,43 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             progressBar->setValue(100);
 
        #ifdef __APPLE__
+#ifdef __APPLE__
 // --------------------------------------------------------------
 // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
 // --------------------------------------------------------------
 QMetaObject::invokeMethod(QApplication::instance(), [=]() {
-    // Étape 1 : Trouver le .tar extrait
     QDir tmp(tmpDir);
-    QStringList tars = tmp.entryList(QStringList() << QStringLiteral("*.tar"), QDir::Files);
-    if (!tars.isEmpty())
-    {
+    QStringList tars = tmp.entryList(QStringList() << "*.tar", QDir::Files);
+    if (!tars.isEmpty()) {
         QString tarPath = tmp.filePath(tars.first());
         qDebug().noquote() << "📦 Found TAR:" << tarPath;
-
         QProcess tarProc;
         tarProc.setWorkingDirectory(tmpDir);
-        tarProc.start(QStringLiteral("/usr/bin/tar"), {QStringLiteral("-xf"), tarPath});
+        tarProc.start("/usr/bin/tar", {"-xf", tarPath});
         tarProc.waitForFinished(60000);
         QFile::remove(tarPath);
         qDebug().noquote() << "✅ TAR extracted and removed.";
     }
 
-    // Étape 2 : Chercher le .app
     QString newAppPath;
     QStringList apps;
-    QDirIterator it(tmpDir, QStringList() << QStringLiteral("*.app"), QDir::Dirs, QDirIterator::Subdirectories);
+    QDirIterator it(tmpDir, QStringList() << "*.app", QDir::Dirs, QDirIterator::Subdirectories);
     while (it.hasNext())
         apps << it.next();
 
-    if (apps.isEmpty())
-    {
+    if (apps.isEmpty()) {
         qWarning().noquote() << "❌ Aucun .app trouvé après extraction TAR";
         return;
     }
 
     newAppPath = apps.first();
-    QString finalAppPath = QDir(tmpDir).filePath(QStringLiteral("ProjectPlusFR.app"));
-    if (QFileInfo(newAppPath).fileName() != QStringLiteral("ProjectPlusFR.app"))
+    QString finalAppPath = QDir(tmpDir).filePath("ProjectPlusFR.app");
+    if (QFileInfo(newAppPath).fileName() != "ProjectPlusFR.app") {
         QDir().rename(newAppPath, finalAppPath);
+    }
 
     QString parentDir = QFileInfo(tmpDir).path();
-    QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
+    QString currentBundle = QDir(parentDir).filePath("ProjectPlusFR.app");
 
     QString script = QStringLiteral(R"(
 #!/bin/bash
@@ -1133,7 +1130,7 @@ open "$DST"
 
     this->close();
     QApplication::processEvents();
-    bool started = QProcess::startDetached(QStringLiteral("/bin/bash"), {QStringLiteral("-c"), script});
+    bool started = QProcess::startDetached("/bin/bash", {"-c", script});
     if (started)
         QTimer::singleShot(300, [] { ::_exit(0); });
     else
@@ -1147,16 +1144,14 @@ open "$DST"
 // --------------------------------------------------------------
 #ifdef _WIN32
     const QString exe = QDir::toNativeSeparators(
-        installationDirectory + QDir::separator() + QStringLiteral("Dolphin.exe"));
+        installationDirectory + QDir::separator() + "Dolphin.exe");
 #else
     const QString exe = QDir::toNativeSeparators(
-        installationDirectory + QDir::separator() + QStringLiteral("Dolphin"));
+        installationDirectory + QDir::separator() + "Dolphin");
 #endif
 
-    if (!QFile::exists(exe))
-    {
-        QMessageBox::information(nullptr, QStringLiteral("Done"),
-                                 QStringLiteral("Installation finished. Launch manually."));
+    if (!QFile::exists(exe)) {
+        QMessageBox::information(nullptr, "Done", "Installation finished. Launch manually.");
         return;
     }
 
@@ -1172,9 +1167,8 @@ Start-Process "$dest\Dolphin.exe";
 )").arg(QDir::toNativeSeparators(tmpDir),
         QDir::toNativeSeparators(installationDirectory));
 
-    QProcess::startDetached(QStringLiteral("powershell.exe"),
-        {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
-         QStringLiteral("Bypass"), QStringLiteral("-Command"), psScript});
+    QProcess::startDetached("powershell.exe",
+        {"-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript});
 #else
     QProcess::startDetached(exe, {});
     QCoreApplication::quit();
@@ -1185,6 +1179,7 @@ Start-Process "$dest\Dolphin.exe";
     });
     thread->start();
 }
+
 
 
 
