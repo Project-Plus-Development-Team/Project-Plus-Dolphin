@@ -1078,7 +1078,6 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
             stepProgressBar->setValue(100);
             progressBar->setValue(100);
 
-#ifdef __APPLE__
         #ifdef __APPLE__
         // --------------------------------------------------------------
         // 📦 Étapes spécifiques macOS : gestion du .tar et remplacement .app
