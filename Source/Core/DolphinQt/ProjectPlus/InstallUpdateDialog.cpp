@@ -896,53 +896,40 @@ if (!curlTimer)
 
 
 
+// Progression curl: lire STDERR
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
-    const QString chunk = QString::fromUtf8(curl->readAllStandardError());
-
     static int lastPercent = 0;
-    static int lastGlobalPercent = -1;
-    static QString lastSpeed;
-    int foundPercent = -1;
-    QString foundSpeed;
+    static QElapsedTimer lastUpdate;
+    if (!lastUpdate.isValid())
+        lastUpdate.start();
 
-    // 🧩 Regex pour trouver le % et la vitesse (ex: "12%  123k" ou "85%  4.5M")
-    QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%\s+[\d\.]+\w?\s+([\d\.]+)([kM]?)/s)"));
+    const QString chunk = QString::fromUtf8(curl->readAllStandardError());
+    int foundPercent = -1;
+
+    // Matche 7%, 42%, 99.9%, 100%
+    QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%)"));
     auto it = re.globalMatch(chunk);
     while (it.hasNext()) {
         auto m = it.next();
         foundPercent = qBound(0, static_cast<int>(m.captured(1).toDouble()), 100);
-        foundSpeed = m.captured(2) + m.captured(3) + QStringLiteral("B/s");
     }
 
     if (foundPercent >= 0) {
-        // Ignore les réécritures temporaires (ex: 12% → 0%)
+        // Évite les “reset” brusques (ex: 12% → 0%)
         if (!(foundPercent < lastPercent && (lastPercent - foundPercent) < 90)) {
-            lastPercent = foundPercent;
-
-            // 🧩 Correction du clignotement et mise à jour de la vitesse
-            if (foundPercent != lastGlobalPercent || foundSpeed != lastSpeed) {
-                lastGlobalPercent = foundPercent;
-                lastSpeed = foundSpeed;
-
-                QString text = QStringLiteral("Downloading: %1%").arg(foundPercent);
-                if (!foundSpeed.isEmpty())
-                    text += QStringLiteral(" (%1)").arg(foundSpeed);
-
-                uiProgress(foundPercent, text);
+            // Met à jour seulement si au moins 1 % de différence ou 300 ms écoulées
+            if (qAbs(foundPercent - lastPercent) >= 1 || lastUpdate.elapsed() > 300) {
+                lastPercent = foundPercent;
+                lastUpdate.restart();
+                uiProgress(foundPercent, QStringLiteral("curl: %1%").arg(foundPercent));
             }
         }
     }
 
-    // (facultatif, pour debug)
-    // if (!chunk.trimmed().isEmpty()) qDebug().noquote() << "[curl]" << chunk.trimmed();
+    // (facultatif) log brut pour debug
+    // if (!chunk.trimmed().isEmpty())
+    //     qDebug().noquote() << "[curl]" << chunk.trimmed();
 });
-
-
-
-
-
-
-
 
 connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
         this, [=](int e, QProcess::ExitStatus) {
@@ -1117,16 +1104,19 @@ QMetaObject::invokeMethod(QApplication::instance(), [=]() {
     QString parentDir = QFileInfo(tmpDir).path();
     QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
-    QString script = QStringLiteral(R"(
+   QString script = QStringLiteral(R"(
 #!/bin/bash
 set -e
 SRC="%2"
 DST="%1"
 sleep 2
+echo "🧹 Cleaning old app..."
 rm -rf "$DST"
-mv "$SRC" "$DST"
+echo "🚚 Moving full update content..."
+mv "$SRC"/* "$(dirname "$DST")"/
+echo "✅ Relaunching app..."
 open "$DST"
-)").arg(currentBundle, finalAppPath);
+)").arg(currentBundle, tmpDir);
 
     this->close();
     QApplication::processEvents();
