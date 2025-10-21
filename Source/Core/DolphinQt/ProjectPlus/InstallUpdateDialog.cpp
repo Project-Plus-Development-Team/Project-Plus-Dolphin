@@ -1101,9 +1101,10 @@ QMetaObject::invokeMethod(QApplication::instance(), [=]() {
         QDir().rename(newAppPath, finalAppPath);
     }
 
-    QString parentDir = QFileInfo(tmpDir).path();
-    QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
+  QString parentDir = QFileInfo(tmpDir).path();
+QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.app"));
 
+// ✅ Crée un script bash robuste pour le déplacement complet
 QString script;
 script += QStringLiteral("#!/bin/bash\n");
 script += QStringLiteral("set -e\n");
@@ -1120,6 +1121,20 @@ script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
 script += QStringLiteral("rmdir \"$SRC\" 2>/dev/null || true\n");
 script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
 script += QStringLiteral("open \"$DST\"\n");
+
+// 🧩 Sauvegarde le script temporairement pour éviter les coupures à la fermeture
+QString scriptPath = QDir(tmpDir).filePath(QStringLiteral("update_relaunch.sh"));
+QFile f(scriptPath);
+if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+    QTextStream out(&f);
+    out.setCodec("UTF-8");
+    out << script;
+    f.close();
+    f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+}
+
+qDebug().noquote() << "🚀 Launching independent update script:" << scriptPath;
+
 
 
     this->close();
