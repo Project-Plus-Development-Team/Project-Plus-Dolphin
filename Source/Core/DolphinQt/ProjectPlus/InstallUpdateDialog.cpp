@@ -1131,7 +1131,6 @@ QString scriptPath = QDir(tmpDir).filePath(QStringLiteral("update_relaunch.sh"))
 QFile f(scriptPath);
 if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
     QTextStream out(&f);
-    out.setCodec("UTF-8");
     out << script;
     f.close();
     f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
