@@ -903,15 +903,13 @@ if (!curlTimer)
 // Progression curl: lire STDERR
 connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress]() {
     static int lastPercent = 0;
-    static QElapsedTimer lastUpdate;
-    if (!lastUpdate.isValid())
-        lastUpdate.start();
+    static QElapsedTimer throttle;
+    if (!throttle.isValid())
+        throttle.start();
 
     const QString chunk = QString::fromUtf8(curl->readAllStandardError());
     int foundPercent = -1;
 
-    // Matche 7%, 42%, 99.9%, 100%
-   
     QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%)"));
     auto it = re.globalMatch(chunk);
     while (it.hasNext()) {
@@ -919,19 +917,19 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
         foundPercent = qBound(0, static_cast<int>(m.captured(1).toDouble()), 100);
     }
 
-    if (foundPercent >= 0) {
-        // ✅ Seulement si changement significatif
-        if (qAbs(foundPercent - lastPercent) >= 2 || lastUpdate.elapsed() > 1000) {
-            lastPercent = foundPercent;
-            lastUpdate.restart();
-
-            // ✅ On ne redessine que la barre (pas le texte)
-            QMetaObject::invokeMethod(QApplication::instance(), [=]() {
-                progressBar->setValue(foundPercent);
-            }, Qt::QueuedConnection);
+    if (foundPercent >= 0 && foundPercent != lastPercent) {
+        // anti-reset : ignore un retour à 0 si c’est un glitch visuel
+        if (!(foundPercent < lastPercent && (lastPercent - foundPercent) < 90)) {
+            // throttle: max 10 updates/sec
+            if (throttle.elapsed() > 100) {
+                lastPercent = foundPercent;
+                uiProgress(lastPercent, QStringLiteral("curl: %1%").arg(lastPercent));
+                throttle.restart();
+            }
         }
     }
 });
+
 
 connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
         this, [=](int e, QProcess::ExitStatus) {
@@ -1112,17 +1110,20 @@ script += QStringLiteral("#!/bin/bash\n");
 script += QStringLiteral("set -e\n");
 script += QStringLiteral("SRC=\"%1\"\n").arg(tmpDir);
 script += QStringLiteral("DST=\"%1\"\n").arg(currentBundle);
+script += QStringLiteral("APP_NAME=\"$(basename \\\"$DST\\\")\"\n");
+script += QStringLiteral("APP_DIR=\"$(dirname \\\"$DST\\\")\"\n");
+script += QStringLiteral("echo \"🔍 SRC: $SRC\"\n");
+script += QStringLiteral("echo \"🔍 DST: $DST\"\n");
 script += QStringLiteral("sleep 2\n");
-script += QStringLiteral("echo \"🧹 Cleaning old app...\"\n");
+script += QStringLiteral("echo \"🧹 Removing old app...\"\n");
 script += QStringLiteral("rm -rf \"$DST\"\n");
-script += QStringLiteral("echo \"🚚 Moving full update content...\"\n");
-script += QStringLiteral("DIR=\"${DST%/*}\"\n");
+script += QStringLiteral("echo \"🚚 Moving new version from $SRC to $APP_DIR ...\"\n");
 script += QStringLiteral("shopt -s dotglob nullglob\n");
-script += QStringLiteral("mv \"$SRC\"/* \"$DIR\"/\n");
+script += QStringLiteral("mv \"$SRC\"/* \"$APP_DIR\"/\n");
 script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
-script += QStringLiteral("rmdir \"$SRC\" 2>/dev/null || true\n");
+script += QStringLiteral("rm -rf \"$SRC\"\n");
 script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
-script += QStringLiteral("open \"$DST\"\n");
+script += QStringLiteral("open \"$APP_DIR/$APP_NAME\" || echo \"⚠️ Failed to relaunch app\"\n");
 
 // 🧩 Sauvegarde le script temporairement pour éviter les coupures à la fermeture
 QString scriptPath = QDir(tmpDir).filePath(QStringLiteral("update_relaunch.sh"));
