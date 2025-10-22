@@ -1112,21 +1112,22 @@ script += QStringLiteral("SRC=\"%1\"\n").arg(tmpDir.trimmed());
 script += QStringLiteral("DST=\"%1\"\n").arg(currentBundle.trimmed());
 script += QStringLiteral("APP_NAME=\"$(basename \"$DST\")\"\n");
 script += QStringLiteral("APP_DIR=\"$(dirname \"$DST\")\"\n");
+script += QStringLiteral("SCRIPT_PATH=\"$0\"\n");
 script += QStringLiteral("echo \"🔍 SRC: $SRC\"\n");
 script += QStringLiteral("echo \"🔍 DST: $DST\"\n");
 script += QStringLiteral("sleep 2\n");
 script += QStringLiteral("echo \"🧹 Removing old app...\"\n");
 script += QStringLiteral("rm -rf \"$DST\"\n");
-script += QStringLiteral("echo \"🚚 Moving new version from $SRC to $APP_DIR ...\"\n");
+script += QStringLiteral("echo \"🚚 Copying new version (full replace)...\"\n");
 script += QStringLiteral("shopt -s dotglob nullglob\n");
-script += QStringLiteral("mv \"$SRC\"/* \"$APP_DIR\"/\n");
+script += QStringLiteral("rsync -a --delete \"$SRC\"/ \"$APP_DIR\"/\n");  // ✅ remplacement total
 script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
 script += QStringLiteral("rm -rf \"$SRC\"\n");
 script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
 script += QStringLiteral("open \"$APP_DIR/$APP_NAME\" || echo \"⚠️ Failed to relaunch app\"\n");
 script += QStringLiteral("sleep 2\n");
 script += QStringLiteral("echo \"🧹 Cleaning script...\"\n");
-script += QStringLiteral("rm -f \"$SCRIPT_PATH\"\n"); // 👈 supprime le .sh après exécution
+script += QStringLiteral("rm -f \"$SCRIPT_PATH\"\n");
 
 // 🧩 Sauvegarde le script temporairement pour éviter les coupures à la fermeture
 QString scriptPath = QDir(parentDir).filePath(QStringLiteral("update_relaunch.sh"));
