@@ -1108,10 +1108,10 @@ QString currentBundle = QDir(parentDir).filePath(QStringLiteral("ProjectPlusFR.a
 QString script;
 script += QStringLiteral("#!/bin/bash\n");
 script += QStringLiteral("set -e\n");
-script += QStringLiteral("SRC=\"%1\"\n").arg(tmpDir);
-script += QStringLiteral("DST=\"%1\"\n").arg(currentBundle);
-script += QStringLiteral("APP_NAME=\"$(basename \\\"$DST\\\")\"\n");
-script += QStringLiteral("APP_DIR=\"$(dirname \\\"$DST\\\")\"\n");
+script += QStringLiteral("SRC=\"%1\"\n").arg(tmpDir.trimmed());
+script += QStringLiteral("DST=\"%1\"\n").arg(currentBundle.trimmed());
+script += QStringLiteral("APP_NAME=\"$(basename \"$DST\")\"\n");
+script += QStringLiteral("APP_DIR=\"$(dirname \"$DST\")\"\n");
 script += QStringLiteral("echo \"🔍 SRC: $SRC\"\n");
 script += QStringLiteral("echo \"🔍 DST: $DST\"\n");
 script += QStringLiteral("sleep 2\n");
@@ -1124,9 +1124,13 @@ script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
 script += QStringLiteral("rm -rf \"$SRC\"\n");
 script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
 script += QStringLiteral("open \"$APP_DIR/$APP_NAME\" || echo \"⚠️ Failed to relaunch app\"\n");
+script += QStringLiteral("sleep 2\n");
+script += QStringLiteral("echo \"🧹 Cleaning script...\"\n");
+script += QStringLiteral("rm -f \"$SCRIPT_PATH\"\n"); // 👈 supprime le .sh après exécution
 
 // 🧩 Sauvegarde le script temporairement pour éviter les coupures à la fermeture
-QString scriptPath = QDir(tmpDir).filePath(QStringLiteral("update_relaunch.sh"));
+QString parentDir = QFileInfo(tmpDir).path(); // Dossier où se trouve .app
+QString scriptPath = QDir(parentDir).filePath(QStringLiteral("update_relaunch.sh"));
 QFile f(scriptPath);
 if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
     QTextStream out(&f);
