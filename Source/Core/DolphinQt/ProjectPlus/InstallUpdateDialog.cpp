@@ -1129,7 +1129,6 @@ script += QStringLiteral("echo \"🧹 Cleaning script...\"\n");
 script += QStringLiteral("rm -f \"$SCRIPT_PATH\"\n"); // 👈 supprime le .sh après exécution
 
 // 🧩 Sauvegarde le script temporairement pour éviter les coupures à la fermeture
-QString parentDir = QFileInfo(tmpDir).path(); // Dossier où se trouve .app
 QString scriptPath = QDir(parentDir).filePath(QStringLiteral("update_relaunch.sh"));
 QFile f(scriptPath);
 if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
