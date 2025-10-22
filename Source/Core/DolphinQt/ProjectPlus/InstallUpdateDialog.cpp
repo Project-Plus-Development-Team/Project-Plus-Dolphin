@@ -1118,19 +1118,25 @@ script += QStringLiteral("echo \"🔍 DST: $DST\"\n");
 script += QStringLiteral("sleep 2\n");
 script += QStringLiteral("echo \"🧹 Removing old app only...\"\n");
 script += QStringLiteral("rm -rf \"$DST\"\n");
-script += QStringLiteral("echo \"🚚 Moving new version from $SRC to $APP_DIR (replace if exists)...\"\n");
+script += QStringLiteral("echo \"🚚 Moving new version from $SRC to $APP_DIR (replace existing files, keep user data)...\"\n");
 script += QStringLiteral("shopt -s dotglob nullglob\n");
 
-// ✅ Déplacement rapide avec remplacement (sans supprimer le reste)
+// ✅ Déplacement sélectif : tout sauf User/ et fichiers .raw
 script += QStringLiteral("for item in \"$SRC\"/*; do\n");
 script += QStringLiteral("  name=\"$(basename \"$item\")\"\n");
 script += QStringLiteral("  dest=\"$APP_DIR/$name\"\n");
-script += QStringLiteral("  rm -rf \"$dest\"\n");  // supprime si déjà existant
+script += QStringLiteral("  if [[ \"$name\" == \"User\" || \"$name\" == *.raw ]]; then\n");
+script += QStringLiteral("    echo \"⚠️ Skipping user file: $name\"\n");
+script += QStringLiteral("    continue\n");
+script += QStringLiteral("  fi\n");
+script += QStringLiteral("  echo \"➡️ Updating $name\"\n");
+script += QStringLiteral("  rm -rf \"$dest\"\n");
 script += QStringLiteral("  mv \"$item\" \"$APP_DIR\"/\n");
 script += QStringLiteral("done\n");
 
 script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
-script += QStringLiteral("rmdir \"$SRC\" 2>/dev/null || true\n");
+script += QStringLiteral("rm -rf \"$SRC\"\n");
+script += QStringLiteral("rm -f \"$APP_DIR/nohup.out\" 2>/dev/null || true\n");  // ✅ supprime nohup.out
 script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
 script += QStringLiteral("open \"$APP_DIR/$APP_NAME\" || echo \"⚠️ Failed to relaunch app\"\n");
 script += QStringLiteral("sleep 2\n");
