@@ -911,6 +911,7 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
     int foundPercent = -1;
 
     // Matche 7%, 42%, 99.9%, 100%
+   
     QRegularExpression re(QStringLiteral(R"((\d{1,3}(?:\.\d+)?)%)"));
     auto it = re.globalMatch(chunk);
     while (it.hasNext()) {
@@ -919,20 +920,17 @@ connect(curl, &QProcess::readyReadStandardError, this, [this, curl, uiProgress](
     }
 
     if (foundPercent >= 0) {
-        // Évite les “reset” brusques (ex: 12% → 0%)
-        if (!(foundPercent < lastPercent && (lastPercent - foundPercent) < 90)) {
-            // Met à jour seulement si au moins 1 % de différence ou 300 ms écoulées
-            if (qAbs(foundPercent - lastPercent) >= 1 || lastUpdate.elapsed() > 300) {
-                lastPercent = foundPercent;
-                lastUpdate.restart();
-                uiProgress(foundPercent, QStringLiteral("curl: %1%").arg(foundPercent));
-            }
+        // ✅ Seulement si changement significatif
+        if (qAbs(foundPercent - lastPercent) >= 2 || lastUpdate.elapsed() > 1000) {
+            lastPercent = foundPercent;
+            lastUpdate.restart();
+
+            // ✅ On ne redessine que la barre (pas le texte)
+            QMetaObject::invokeMethod(QApplication::instance(), [=]() {
+                progressBar->setValue(foundPercent);
+            }, Qt::QueuedConnection);
         }
     }
-
-    // (facultatif) log brut pour debug
-    // if (!chunk.trimmed().isEmpty())
-    //     qDebug().noquote() << "[curl]" << chunk.trimmed();
 });
 
 connect(curl, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
@@ -1140,18 +1138,28 @@ qDebug().noquote() << "🚀 Launching independent update script:" << scriptPath;
 
 
 
-    this->close();
-    QApplication::processEvents();
-    bool started = QProcess::startDetached(QStringLiteral("/bin/bash"),
-                                           {QStringLiteral("-c"), script});
-    if (started)
-        QTimer::singleShot(300, [] { ::_exit(0); });
-    else
-        QCoreApplication::quit();
+   // ✅ Ferme proprement la fenêtre avant de quitter
+this->close();
+QApplication::processEvents();
+
+// ✅ Lancement via nohup (indépendant de Dolphin)
+bool started = QProcess::startDetached(QStringLiteral("/usr/bin/nohup"),
+                                       {QStringLiteral("/bin/bash"), scriptPath},
+                                       tmpDir);
+
+if (!started)
+{
+    qWarning().noquote() << "❌ Failed to launch relaunch script.";
+    QMessageBox::warning(nullptr, QStringLiteral("Update error"),
+                         QStringLiteral("Failed to launch update script."));
+    return;
+}
+
+qDebug().noquote() << "✅ nohup detached successfully, exiting Dolphin...";
+QTimer::singleShot(500, [] { ::_exit(0); });
 
 }, Qt::QueuedConnection);
 
-#else
 // --------------------------------------------------------------
 // 🪟 Windows / 🐧 Linux
 // --------------------------------------------------------------
