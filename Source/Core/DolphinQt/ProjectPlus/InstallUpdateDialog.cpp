@@ -1116,13 +1116,21 @@ script += QStringLiteral("SCRIPT_PATH=\"$0\"\n");
 script += QStringLiteral("echo \"🔍 SRC: $SRC\"\n");
 script += QStringLiteral("echo \"🔍 DST: $DST\"\n");
 script += QStringLiteral("sleep 2\n");
-script += QStringLiteral("echo \"🧹 Removing old app...\"\n");
+script += QStringLiteral("echo \"🧹 Removing old app only...\"\n");
 script += QStringLiteral("rm -rf \"$DST\"\n");
-script += QStringLiteral("echo \"🚚 Copying new version (full replace)...\"\n");
+script += QStringLiteral("echo \"🚚 Moving new version from $SRC to $APP_DIR (replace if exists)...\"\n");
 script += QStringLiteral("shopt -s dotglob nullglob\n");
-script += QStringLiteral("rsync -a --delete \"$SRC\"/ \"$APP_DIR\"/\n");  // ✅ remplacement total
+
+// ✅ Déplacement rapide avec remplacement (sans supprimer le reste)
+script += QStringLiteral("for item in \"$SRC\"/*; do\n");
+script += QStringLiteral("  name=\"$(basename \"$item\")\"\n");
+script += QStringLiteral("  dest=\"$APP_DIR/$name\"\n");
+script += QStringLiteral("  rm -rf \"$dest\"\n");  // supprime si déjà existant
+script += QStringLiteral("  mv \"$item\" \"$APP_DIR\"/\n");
+script += QStringLiteral("done\n");
+
 script += QStringLiteral("echo \"🧽 Cleaning temporary files...\"\n");
-script += QStringLiteral("rm -rf \"$SRC\"\n");
+script += QStringLiteral("rmdir \"$SRC\" 2>/dev/null || true\n");
 script += QStringLiteral("echo \"✅ Relaunching app...\"\n");
 script += QStringLiteral("open \"$APP_DIR/$APP_NAME\" || echo \"⚠️ Failed to relaunch app\"\n");
 script += QStringLiteral("sleep 2\n");
