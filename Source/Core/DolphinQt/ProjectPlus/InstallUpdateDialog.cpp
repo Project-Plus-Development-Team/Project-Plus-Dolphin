@@ -230,7 +230,23 @@ void InstallUpdateDialog::checkIfAllDownloadsFinished(bool sdFinished, bool sdSu
 
     QString zipPath = QDir(realTmpDir).filePath(filename);
 #else
-    QString zipPath = QDir(temporaryDirectory).filePath(filename);
+    // 🪟 / 🐧 Windows & Linux : forcer le ZIP dans update_tmp à côté de Dolphin.exe
+    QString appDir = QCoreApplication::applicationDirPath();
+    QDir dir(appDir);
+
+    // Remonte jusqu’à portable.txt pour les versions portables
+    while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
+        dir.cdUp();
+
+    QString baseDir = QFile::exists(dir.filePath(QStringLiteral("portable.txt")))
+                          ? dir.absolutePath()
+                          : QFileInfo(installationDirectory).path();
+
+    QString realTmpDir = QDir(baseDir).filePath(QStringLiteral("update_tmp"));
+    QDir().mkpath(realTmpDir);
+
+    QString zipPath = QDir(realTmpDir).filePath(filename);
+    qDebug().noquote() << "📦 [Windows] Download ZIP path forced to:" << zipPath;
 #endif
 
 qDebug().noquote() << "🚀 curl (or worker) will download ZIP to:" << zipPath;
@@ -985,11 +1001,11 @@ void InstallUpdateDialog::timerEvent(QTimerEvent *e)
 void InstallUpdateDialog::install()
 
 {
-    qDebug().noquote() << QStringLiteral("🧩 Starting installation...");
+  // ✅ Corrige le dossier temporaire selon la plateforme
+QString tmpDir = temporaryDirectory;
 
-    // ✅ Corrige le dossier temporaire pour macOS portable
-   // 🔧 Corrige temporairement le chemin si on est dans App Translocation
-    QString tmpDir = temporaryDirectory;
+#ifdef __APPLE__
+// 🧩 macOS : corrige App Translocation (sandbox temporaire)
 if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
 {
     qDebug().noquote() << "⚠️ Detected macOS App Translocation → remapping temporary directory";
@@ -997,7 +1013,7 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
     QString appDir = QCoreApplication::applicationDirPath();
     QDir dir(appDir);
 
-    // remonte jusqu'à portable.txt
+    // Remonte jusqu’à trouver portable.txt (point d’ancrage du bundle)
     while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
         dir.cdUp();
 
@@ -1006,9 +1022,47 @@ if (tmpDir.startsWith(QStringLiteral("/private/var/folders/")))
         QString baseDir = dir.absolutePath();
         tmpDir = QDir(baseDir).filePath(QStringLiteral("update_tmp"));
         QDir().mkpath(tmpDir);
-        qDebug().noquote() << "✅ Using corrected update_tmp path:" << tmpDir;
+        qDebug().noquote() << "✅ Using corrected update_tmp path (macOS):" << tmpDir;
     }
 }
+#else
+// 🪟 / 🐧 Windows & Linux : place update_tmp à côté du Dolphin.exe
+QString appDir = QCoreApplication::applicationDirPath();
+QDir dir(appDir);
+
+// Remonte jusqu’à trouver portable.txt pour les versions portables
+while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
+    dir.cdUp();
+
+QString baseDir = QFile::exists(dir.filePath(QStringLiteral("portable.txt")))
+                      ? dir.absolutePath()
+                      : QFileInfo(installationDirectory).path();
+
+tmpDir = QDir(baseDir).filePath(QStringLiteral("update_tmp"));
+QDir().mkpath(tmpDir);
+qDebug().noquote() << "📁 Using update_tmp path (Windows/Linux):" << tmpDir;
+#endif
+
+#ifdef _WIN32
+// 🧩 Windows — corrige le chemin final du ZIP pour forcer update_tmp à côté de l'exécutable
+{
+    QString appDir = QCoreApplication::applicationDirPath();
+    QDir dir(appDir);
+
+    // Remonte jusqu'à portable.txt si c’est une version portable
+    while (!dir.isRoot() && !QFile::exists(dir.filePath(QStringLiteral("portable.txt"))))
+        dir.cdUp();
+
+    QString baseDir = QFile::exists(dir.filePath(QStringLiteral("portable.txt")))
+                          ? dir.absolutePath()
+                          : QFileInfo(installationDirectory).path();
+
+    tmpDir = QDir(baseDir).filePath(QStringLiteral("update_tmp"));
+    QDir().mkpath(tmpDir);
+
+    qDebug().noquote() << "📦 [Windows] Forced update_tmp path for ZIP:" << tmpDir;
+}
+#endif
 
  QString zipFile = QDir(tmpDir).filePath(filename);
 
@@ -1179,43 +1233,95 @@ QTimer::singleShot(500, [] { ::_exit(0); });
 
 }, Qt::QueuedConnection);
 
+#endif // __APPLE__  ✅ <-- FERMER ici le bloc macOS
+
 // --------------------------------------------------------------
 // 🪟 Windows / 🐧 Linux
 // --------------------------------------------------------------
 #ifdef _WIN32
-    const QString exe = QDir::toNativeSeparators(
+    // ================================
+    // 🪟 WINDOWS : finalisation via script .bat placé dans le dossier cible
+    // ================================
+    const QString dstDir = QDir::toNativeSeparators(installationDirectory);
+    const QString srcDir = QDir::toNativeSeparators(tmpDir);
+    const QString exePath = QDir::toNativeSeparators(
         installationDirectory + QDir::separator() + QStringLiteral("Dolphin.exe"));
-#else
-    const QString exe = QDir::toNativeSeparators(
-        installationDirectory + QDir::separator() + QStringLiteral("Dolphin"));
-#endif
 
-    if (!QFile::exists(exe)) {
-        QMessageBox::information(nullptr, QStringLiteral("Done"),
-                                 QStringLiteral("Installation finished. Launch manually."));
+    // Écrire le .bat dans le dossier destination (PAS dans update_tmp)
+    QString batPath = QDir(installationDirectory).filePath(QStringLiteral("update_relaunch.bat"));
+    QFile f(batPath);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QTextStream out(&f);
+
+        out << "@echo off\n";
+        out << "setlocal enabledelayedexpansion\n";
+        out << "title Project+FR Updater\n";
+        out << "set SRC=" << srcDir << "\n";
+        out << "set DST=" << dstDir << "\n";
+        out << "echo.\n";
+        out << "echo ==============================================\n";
+        out << "echo 🧩 PROJECT+FR UPDATER - FINAL PHASE\n";
+        out << "echo SRC=%SRC%\n";
+        out << "echo DST=%DST%\n";
+        out << "echo ==============================================\n";
+        out << "echo.\n";
+        out << "echo Waiting for Dolphin to close...\n";
+        out << "timeout /t 2 /nobreak >nul\n";
+
+        // Se placer dans le dossier destination pour éviter tout verrou sur SRC
+        out << "cd /d \"%DST%\"\n";
+
+        out << "echo Moving new files to destination...\n";
+        out << "robocopy \"%SRC%\" \"%DST%\" /E /MOVE /R:2 /W:1 >nul\n";
+        out << "set RC=%ERRORLEVEL%\n";
+        out << "if %RC% GEQ 8 (\n";
+        out << "  echo ❌ Robocopy failed with code %RC%.\n";
+        out << "  pause\n";
+        out << "  exit /b %RC%\n";
+        out << ")\n";
+        out << "echo ✅ Files moved successfully.\n";
+
+        out << "echo Cleaning temporary folder...\n";
+        out << "rmdir /s /q \"%SRC%\" >nul 2>&1\n";
+
+        out << "echo Relaunching Dolphin...\n";
+        out << "if exist \"Dolphin.exe\" (\n";
+        out << "  echo ▶ Launching Dolphin.exe from %CD%\n";
+        out << "  start \"Project+FR Relaunch\" \".\\Dolphin.exe\"\n";
+        out << ") else (\n";
+        out << "  echo ❌ Dolphin.exe not found in %CD%!\n";
+        out << "  dir /b\n";
+        out << "  pause\n";
+        out << ")\n";
+
+        out << "echo Cleaning script...\n";
+        out << "del \"%~f0\" >nul 2>&1\n";
+        out << "exit\n";
+
+        f.close();
+        f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    }
+
+    qDebug().noquote() << "🚀 Launching Windows update finalizer:" << batPath;
+
+    // 👉 Lancer le .bat avec dossier de travail = installationDirectory (pas update_tmp)
+    bool started = QProcess::startDetached(QStringLiteral("cmd.exe"),
+                                           {QStringLiteral("/C"), batPath},
+                                           installationDirectory /* working dir */);
+    if (!started) {
+        QMessageBox::warning(nullptr, QStringLiteral("Update error"),
+                             QStringLiteral("Failed to launch update script."));
         return;
     }
 
-    this->accept();
-
-#ifdef _WIN32
-    QString psScript = QStringLiteral(R"(
-$tmp = "%1";
-$dest = "%2";
-Start-Sleep -Seconds 1;
-robocopy $tmp $dest /E /MOVE /R:3 /W:1 | Out-Null;
-Start-Process "$dest\Dolphin.exe";
-)").arg(QDir::toNativeSeparators(tmpDir),
-        QDir::toNativeSeparators(installationDirectory));
-
-    QProcess::startDetached(QStringLiteral("powershell.exe"),
-        {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
-         QStringLiteral("Bypass"), QStringLiteral("-Command"), psScript});
+    qDebug().noquote() << "✅ Script launched successfully, exiting Dolphin...";
+    QTimer::singleShot(500, [] { ::_exit(0); });
 #else
+    const QString exe = QDir::toNativeSeparators(
+        installationDirectory + QDir::separator() + QStringLiteral("Dolphin"));
     QProcess::startDetached(exe, {});
     QCoreApplication::quit();
-#endif // _WIN32
-#endif // __APPLE__
+#endif
 
         }, Qt::QueuedConnection);
     });
