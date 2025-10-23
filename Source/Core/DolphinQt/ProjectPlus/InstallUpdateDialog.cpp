@@ -1305,14 +1305,27 @@ QTimer::singleShot(500, [] { ::_exit(0); });
     qDebug().noquote() << "🚀 Launching Windows update finalizer:" << batPath;
 
     // 👉 Lancer le .bat avec dossier de travail = installationDirectory (pas update_tmp)
-    bool started = QProcess::startDetached(QStringLiteral("cmd.exe"),
-                                           {QStringLiteral("/C"), batPath},
-                                           installationDirectory /* working dir */);
+    QString cmdPath = QStringLiteral("cmd.exe");
+    QStringList args = {QStringLiteral("/C"), QDir::toNativeSeparators(batPath)};
+
+    qDebug().noquote() << "🧩 Launching .bat via cmd.exe:" << cmdPath << args
+                       << "Working dir:" << installationDirectory;
+
+    bool started = QProcess::startDetached(
+        cmdPath,
+        args,
+        QDir::toNativeSeparators(installationDirectory)
+    );
+
     if (!started) {
-        QMessageBox::warning(nullptr, QStringLiteral("Update error"),
-                             QStringLiteral("Failed to launch update script."));
-        return;
+        qWarning().noquote() << "❌ Failed to start .bat file directly. Trying fallback...";
+        // 🔁 Tentative alternative directe sans working dir (certains environnements GitHub CI échouent sinon)
+        started = QProcess::startDetached(
+            QStringLiteral("cmd.exe"),
+            {QStringLiteral("/C"), QDir::toNativeSeparators(batPath)}
+        );
     }
+
 
     qDebug().noquote() << "✅ Script launched successfully, exiting Dolphin...";
     QTimer::singleShot(500, [] { ::_exit(0); });
