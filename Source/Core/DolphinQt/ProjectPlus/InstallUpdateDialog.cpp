@@ -1281,6 +1281,15 @@ QTimer::singleShot(500, [] { ::_exit(0); });
         out << ")\n";
         out << "echo ✅ Files moved successfully.\n";
 
+         // 🔧 Exécuter le script PowerShell juste après le déplacement
+        out << "echo Running backend fix script...\n";
+        out << "if exist \"fix_backend.ps1\" (\n";
+        out << "  echo ▶ Executing fix_backend.ps1...\n";
+        out << "  powershell -NoProfile -ExecutionPolicy Bypass -File \"fix_backend.ps1\"\n";
+        out << ") else (\n";
+        out << "  echo ⚠️ fix_backend.ps1 not found, skipping backend fix.\n";
+        out << ")\n";
+
         out << "echo Cleaning temporary folder...\n";
         out << "rmdir /s /q \"%SRC%\" >nul 2>&1\n";
 
