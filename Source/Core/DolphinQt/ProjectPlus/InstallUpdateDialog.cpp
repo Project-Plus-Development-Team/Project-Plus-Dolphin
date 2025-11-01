@@ -1255,7 +1255,8 @@ QTimer::singleShot(500, [] { ::_exit(0); });
         f.write("\xEF\xBB\xBF");
 
         QTextStream out(&f);
-        out.setCodec("UTF-8");
+        out.setEncoding(QStringConverter::Utf8);
+
 
         out << "@echo off\n";
         out << "setlocal enabledelayedexpansion\n";
