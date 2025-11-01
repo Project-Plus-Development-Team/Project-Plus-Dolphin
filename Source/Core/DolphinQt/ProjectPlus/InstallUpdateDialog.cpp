@@ -1252,13 +1252,12 @@ QTimer::singleShot(500, [] { ::_exit(0); });
     QFile f(batPath);
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
 
-        f.write("\xEF\xBB\xBF");
-
         QTextStream out(&f);
         out.setEncoding(QStringConverter::Utf8);
 
 
         out << "@echo off\n";
+        out << "chcp 65001 >nul\n";
         out << "setlocal enabledelayedexpansion\n";
         out << "title Project+FR Updater\n";
         out << "set SRC=" << srcDir << "\n";
