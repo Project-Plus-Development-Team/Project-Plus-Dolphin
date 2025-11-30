@@ -200,7 +200,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Purge .git for space reasons
-      run: rm -rf /home/runner/work/Project-Plus-Dolphin-src/.git
+      run: rm -rf /home/runner/work/Project-Plus-Dolphin-src/.git && rm -rf /home/runner/actions-runner/cached/_diag/* && rm -rf /home/runner/actions-runner/_work/_temp/ && rm -rf /home/runner/actions-runner/_work/_tool/*
     - name: Setup Packages
       run: |
         flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo && \
