@@ -195,7 +195,7 @@ jobs:
     name: Flatpak Build
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      image: bilelmoussaoui/flatpak-github-actions:kde-5.15-22.08
       options: --privileged
     steps:
     - uses: actions/checkout@v2
