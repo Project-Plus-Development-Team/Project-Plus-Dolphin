@@ -209,6 +209,7 @@ jobs:
         rm -rf /usr/share/dotnet
         rm -rf /opt/ghc
         rm -rf /usr/local/share/boost
+        docker system prune -a -f
         echo "Disk space after cleanup:"
         df -h
     - name: Setup Packages
