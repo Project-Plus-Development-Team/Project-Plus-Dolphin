@@ -355,7 +355,7 @@ progressBar->setValue(50);
 
 void InstallUpdateDialog::download()
 {
-  const qint64 minRequiredBytes = 8ll * 1024 * 1024 * 1024; // 8 Go
+  const qint64 minRequiredBytes = 5ll * 1024 * 1024 * 1024; // 5 Go
 if (!hasEnoughFreeSpace(installationDirectory, minRequiredBytes))
 {
     QMessageBox::critical(this,

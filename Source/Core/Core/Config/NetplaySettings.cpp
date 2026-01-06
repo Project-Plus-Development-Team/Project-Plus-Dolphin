@@ -44,7 +44,7 @@ const Info<bool> NETPLAY_ENABLE_CHUNKED_UPLOAD_LIMIT{
 const Info<u32> NETPLAY_CHUNKED_UPLOAD_LIMIT{{System::Main, "NetPlay", "ChunkedUploadLimit"}, 3000};
 
 const Info<u32> NETPLAY_MINIMUM_BUFFER_SIZE{{System::Main, "NetPlay", "MinimumBufferSize"}, 2};
-const Info<u32> NETPLAY_PLAYER_BUFFER_SIZE{{System::Main, "NetPlay", "PlayerBufferSize"}, 2};
+const Info<u32> NETPLAY_PLAYER_BUFFER_SIZE{{System::Main, "NetPlay", "PlayerBufferSize"}, 3};
 const Info<u32> NETPLAY_CLIENT_BUFFER_SIZE{{System::Main, "NetPlay", "BufferSizeClient"}, 1};
 
 const Info<bool> NETPLAY_BRAWL_MUSIC_OFF{{System::Main, "NetPlay", "BrawlMusicOff"}, false};
